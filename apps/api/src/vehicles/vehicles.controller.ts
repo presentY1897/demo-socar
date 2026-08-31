@@ -13,7 +13,10 @@ export class VehiclesController {
       where: { id },
       include: { plan: true, zone: true },
     });
-    if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
+    // 법인 전용 차량은 공개 API에서 비노출
+    if (!vehicle || vehicle.corporationId !== null) {
+      throw new NotFoundException('차량을 찾을 수 없습니다');
+    }
     return vehicle;
   }
 

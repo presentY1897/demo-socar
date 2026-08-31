@@ -145,6 +145,70 @@ export async function runSeed(prisma: PrismaClient) {
     }),
   ]);
 
+  // ── 법인 전용존 + 전용 차량 (FMS: 법인 소유/장기렌트 차량을 플랫폼 기술로 관리) ──
+  const corpZone = await prisma.zone.create({
+    data: {
+      name: '데모컴퍼니 사옥 주차장',
+      region: 'seoul',
+      address: corp.officeAddress,
+      lat: corp.officeLat,
+      lng: corp.officeLng,
+      capacity: 3,
+      corporationId: corp.id,
+    },
+  });
+  const [dedicatedEv, dedicatedVan] = await Promise.all([
+    prisma.vehicle.create({
+      data: {
+        modelName: '아이오닉 5', plateNo: '00허 0001', fuel: FuelType.EV, seats: 5,
+        zoneId: corpZone.id, planId: planEv.id, corporationId: corp.id,
+      },
+    }),
+    prisma.vehicle.create({
+      data: {
+        modelName: '카니발', plateNo: '00허 0002', fuel: FuelType.GASOLINE, seats: 7,
+        zoneId: corpZone.id, planId: planSuv.id, corporationId: corp.id,
+      },
+    }),
+  ]);
+
+  // 전용 차량 운행 이력 (운행일지 — 과금 없음). 카니발은 지연 반납이 잦은 차로 만든다
+  for (let day = 20; day >= 1; day -= 2) {
+    const vehicle = rand() > 0.4 ? dedicatedEv : dedicatedVan;
+    const isVan = vehicle.id === dedicatedVan.id;
+    const startAt = new Date();
+    startAt.setDate(startAt.getDate() - day);
+    startAt.setHours(9 + Math.floor(rand() * 6), rand() > 0.5 ? 30 : 0, 0, 0);
+    const endAt = new Date(startAt.getTime() + (1 + Math.floor(rand() * 3)) * 3600 * 1000);
+    const lateMinutes = isVan && rand() < 0.5 ? 15 + Math.floor(rand() * 40) : 0;
+    try {
+      await prisma.reservation.create({
+        data: {
+          userId: corpMember.id,
+          vehicleId: vehicle.id,
+          startAt, endAt,
+          status: ReservationStatus.COMPLETED,
+          insurance: InsuranceTier.STANDARD,
+          rentalFeeKrw: 0, insuranceFeeKrw: 0, totalUpfrontKrw: 0,
+          createdAt: new Date(startAt.getTime() - 3600 * 1000),
+          rental: {
+            create: {
+              status: RentalStatus.COMPLETED,
+              startedAt: startAt,
+              returnedAt: new Date(endAt.getTime() + lateMinutes * 60 * 1000),
+              distanceKm: Math.round((10 + rand() * 40) * 10) / 10,
+              lateMinutes,
+              driveFeeKrw: 0,
+              lateFeeKrw: 0,
+            },
+          },
+        },
+      });
+    } catch {
+      // 시간 겹침(EXCLUDE 제약)은 건너뜀
+    }
+  }
+
   // ── 쿠폰/크레딧 ──
   await prisma.coupon.create({
     data: {

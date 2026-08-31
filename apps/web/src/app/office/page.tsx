@@ -11,6 +11,7 @@ interface Candidate {
   id: string;
   rank: number;
   score: number;
+  isDedicated: boolean;
   walkSeconds: number;
   walkMeters: number;
   bufferMinutes: number;
@@ -188,6 +189,15 @@ export default function OfficePage() {
                       <p className="text-sm font-semibold">
                         {c.rank}. {c.vehicle.modelName}
                         <span className="ml-1.5 text-xs font-normal text-gray-400">{c.vehicle.plateNo}</span>
+                        {c.isDedicated ? (
+                          <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600">
+                            전용
+                          </span>
+                        ) : (
+                          <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                            공유존
+                          </span>
+                        )}
                       </p>
                       <span className="text-sm font-bold text-sky-600">{c.score}점</span>
                     </div>

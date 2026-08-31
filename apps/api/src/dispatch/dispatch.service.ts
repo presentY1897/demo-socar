@@ -69,9 +69,13 @@ export class DispatchService {
     });
     const origin = { lat: request.originLat, lng: request.originLng };
 
-    // 1) 반경 내 존 (직선거리 프리필터)
-    const zones = (await this.prisma.zone.findMany()).filter(
-      (z) => haversineMeters(origin, { lat: z.lat, lng: z.lng }) <= CANDIDATE_RADIUS_M,
+    // 1) 후보 존: 반경 내 공유존(직선거리 프리필터) + 이 법인의 전용존
+    const allZones = await this.prisma.zone.findMany();
+    const zones = allZones.filter(
+      (z) =>
+        z.corporationId === request.corporationId ||
+        (z.corporationId === null &&
+          haversineMeters(origin, { lat: z.lat, lng: z.lng }) <= CANDIDATE_RADIUS_M),
     );
     if (zones.length === 0) {
       await this.prisma.dispatchRequest.update({
@@ -83,8 +87,13 @@ export class DispatchService {
     const zoneById = new Map(zones.map((z) => [z.id, z]));
 
     // 2) 가용 차량 + 시간 겹침 필터
+    //    법인 전용 차량(FMS) 우선 대상 + 인근 공유존 차량 폴백을 한 풀에서 스코어링
     const vehicles = await this.prisma.vehicle.findMany({
-      where: { zoneId: { in: zones.map((z) => z.id) }, status: 'AVAILABLE' },
+      where: {
+        zoneId: { in: zones.map((z) => z.id) },
+        status: 'AVAILABLE',
+        OR: [{ corporationId: null }, { corporationId: request.corporationId }],
+      },
       include: {
         reservations: {
           where: {
@@ -154,6 +163,7 @@ export class DispatchService {
         travelMethod: est.method,
         bufferMinutes,
         lateRiskPct,
+        isDedicated: v.corporationId === request.corporationId && v.corporationId !== null,
       });
     }
 
@@ -167,6 +177,7 @@ export class DispatchService {
           vehicleId: c.vehicleId,
           rank: c.rank,
           score: c.score,
+          isDedicated: c.isDedicated,
           walkSeconds: c.walkSeconds,
           walkMeters: c.walkMeters,
           bufferMinutes: c.bufferMinutes ?? 9999,
@@ -254,6 +265,8 @@ export class DispatchService {
           cardLast4: '9999', // 법인카드 (모의)
           idempotencyKey: `dispatch-${requestId}`,
         },
+        // 전용 차량(FMS)은 과금 없이 예약 — 동시성 방어는 동일 경로
+        { corporateDedicated: candidate.isDedicated },
       );
     } catch (e) {
       if (e instanceof ConflictException) {
@@ -313,14 +326,19 @@ export class DispatchService {
 
     const zones = (await this.prisma.zone.findMany()).filter(
       (z) =>
-        haversineMeters(
-          { lat: corp.officeLat, lng: corp.officeLng },
-          { lat: z.lat, lng: z.lng },
-        ) <= CANDIDATE_RADIUS_M,
+        z.corporationId === corp.id ||
+        (z.corporationId === null &&
+          haversineMeters(
+            { lat: corp.officeLat, lng: corp.officeLng },
+            { lat: z.lat, lng: z.lng },
+          ) <= CANDIDATE_RADIUS_M),
     );
 
     const vehicles = await this.prisma.vehicle.findMany({
-      where: { zoneId: { in: zones.map((z) => z.id) } },
+      where: {
+        zoneId: { in: zones.map((z) => z.id) },
+        OR: [{ corporationId: null }, { corporationId: corp.id }],
+      },
       include: {
         zone: true,
         reservations: {

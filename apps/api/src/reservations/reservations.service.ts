@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { quote, validateSlotRange, type CreateReservationDto, type QuoteRequestDto } from '@socar/shared';
+import { quote, SLOT_MS, validateSlotRange, type CreateReservationDto, type QuoteRequestDto } from '@socar/shared';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtUser } from '../auth/jwt-auth.guard';
@@ -33,6 +33,9 @@ export class ReservationsService {
     if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
     if (vehicle.status !== 'AVAILABLE') {
       throw new ConflictException('현재 이용할 수 없는 차량입니다 (정비 중)');
+    }
+    if (vehicle.corporationId !== null) {
+      throw new BadRequestException('법인 전용 차량은 오피스 배차를 통해서만 이용할 수 있습니다');
     }
 
     let couponDiscountKrw = 0;
@@ -65,7 +68,46 @@ export class ReservationsService {
     return { vehicle, breakdown };
   }
 
-  async create(user: JwtUser, dto: CreateReservationDto) {
+  /**
+   * 법인 전용 차량(FMS)은 이용 과금이 없다 — 소속 법인의 배차 승인 경로에서만 0원 예약.
+   * 그 외에는 일반 견적(quoteFor)을 따른다.
+   */
+  private async resolveBreakdown(
+    tx: Prisma.TransactionClient,
+    user: JwtUser,
+    dto: CreateReservationDto,
+    startAt: Date,
+    endAt: Date,
+    opts: { corporateDedicated?: boolean },
+  ) {
+    if (!opts.corporateDedicated) {
+      return (await this.quoteFor(tx, user.id, dto)).breakdown;
+    }
+
+    const vehicle = await tx.vehicle.findUnique({ where: { id: dto.vehicleId } });
+    if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
+    if (vehicle.status !== 'AVAILABLE') {
+      throw new ConflictException('현재 이용할 수 없는 차량입니다 (정비 중)');
+    }
+    if (vehicle.corporationId === null || vehicle.corporationId !== user.corporationId) {
+      throw new BadRequestException('소속 법인의 전용 차량이 아닙니다');
+    }
+
+    return {
+      slotCount: Math.round((endAt.getTime() - startAt.getTime()) / SLOT_MS),
+      rentalFeeKrw: 0,
+      insuranceFeeKrw: 0,
+      discountKrw: 0,
+      creditUsedKrw: 0,
+      totalUpfrontKrw: 0,
+    };
+  }
+
+  async create(
+    user: JwtUser,
+    dto: CreateReservationDto,
+    opts: { corporateDedicated?: boolean } = {},
+  ) {
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
 
@@ -77,7 +119,7 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const { breakdown } = await this.quoteFor(tx, user.id, dto);
+        const breakdown = await this.resolveBreakdown(tx, user, dto, startAt, endAt, opts);
 
         // 1차 확인: 겹치는 예약이 있으면 친절한 409 (최종 방어는 DB EXCLUDE 제약)
         const conflicts = await tx.reservation.findMany({

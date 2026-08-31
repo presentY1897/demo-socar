@@ -80,14 +80,18 @@ export class RentalsService {
         throw new BadRequestException('정산 대기 상태가 아닙니다');
       }
 
-      const plan = await tx.pricingPlan.findUniqueOrThrow({
-        where: { id: rental.reservation.vehicle.planId },
-      });
-      const s = settle({
-        plan,
-        distanceKm: rental.distanceKm ?? 0,
-        lateMinutes: rental.lateMinutes,
-      });
+      // 법인 전용 차량(FMS)은 과금 없음 — 주행거리는 운행일지로만 기록
+      let s = { driveFeeKrw: 0, lateFeeKrw: 0, totalKrw: 0 };
+      if (rental.reservation.vehicle.corporationId === null) {
+        const plan = await tx.pricingPlan.findUniqueOrThrow({
+          where: { id: rental.reservation.vehicle.planId },
+        });
+        s = settle({
+          plan,
+          distanceKm: rental.distanceKm ?? 0,
+          lateMinutes: rental.lateMinutes,
+        });
+      }
 
       if (s.totalKrw > 0) {
         const upfront = await tx.payment.findFirst({

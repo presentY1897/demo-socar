@@ -42,20 +42,24 @@ model Corporation {
 
   members          User[]
   dispatchRequests DispatchRequest[]
+  zones            Zone[] // 기업 전용존 (사옥 주차장 등)
+  vehicles         Vehicle[] // 법인 소유/장기렌트 차량 (FMS 모델)
 }
 
 // ─────────────────────────── 존 / 차량 / 요금제 ───────────────────────────
 
 model Zone {
-  id       String @id @default(cuid())
-  name     String
-  region   String // 도로망 그래프 파일 키 (예: "seoul", "busan")
-  address  String
-  lat      Float
-  lng      Float
-  capacity Int
+  id            String  @id @default(cuid())
+  name          String
+  region        String // 도로망 그래프 파일 키 (예: "seoul", "busan")
+  address       String
+  lat           Float
+  lng           Float
+  capacity      Int
+  corporationId String? // 값이 있으면 기업 전용존 — 일반 이용자에게 비노출
 
-  vehicles Vehicle[]
+  corporation Corporation? @relation(fields: [corporationId], references: [id])
+  vehicles    Vehicle[]
 }
 
 model PricingPlan {
@@ -83,18 +87,20 @@ enum VehicleStatus {
 }
 
 model Vehicle {
-  id        String        @id @default(cuid())
-  modelName String
-  plateNo   String        @unique
-  fuel      FuelType
-  seats     Int
-  status    VehicleStatus @default(AVAILABLE)
-  imageUrl  String?
-  zoneId    String
-  planId    String
+  id            String        @id @default(cuid())
+  modelName     String
+  plateNo       String        @unique
+  fuel          FuelType
+  seats         Int
+  status        VehicleStatus @default(AVAILABLE)
+  imageUrl      String?
+  zoneId        String
+  planId        String
+  corporationId String? // 값이 있으면 법인 소유/장기렌트 차량 (FMS) — 이용 과금 없음
 
   zone               Zone                @relation(fields: [zoneId], references: [id])
   plan               PricingPlan         @relation(fields: [planId], references: [id])
+  corporation        Corporation?        @relation(fields: [corporationId], references: [id])
   reservations       Reservation[]
   dispatchCandidates DispatchCandidate[]
 }
@@ -271,6 +277,7 @@ model DispatchCandidate {
   vehicleId     String
   rank          Int
   score         Float
+  isDedicated   Boolean  @default(false) // 법인 전용 차량 여부
   walkSeconds   Int // 요청자 → 차량 존까지 이동 시간 (길찾기 추정)
   walkMeters    Int
   bufferMinutes Int // 직전 예약 반납 예정 시각과의 여유
