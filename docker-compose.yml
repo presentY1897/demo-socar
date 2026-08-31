@@ -1,3 +1,6 @@
+# 프로젝트명 고정 — worktree 디렉토리명(main 등)이 바뀌어도 볼륨/네트워크가 유지된다
+name: socar
+
 services:
   db:
     image: postgres:16-alpine
