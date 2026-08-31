@@ -1,22 +1,30 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { settle } from '@socar/shared';
+import { quote, settle, validateSlotRange, type ExtendRentalDto } from '@socar/shared';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtUser } from '../auth/jwt-auth.guard';
+
+function isOverlapViolation(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.includes('23P01') || msg.includes('reservation_no_overlap');
+}
 
 /**
  * 대여 라이프사이클 상태 머신.
  *
  *   Reservation(CONFIRMED) --문열기--> Rental(IN_USE) + Reservation(IN_USE)
- *   Rental(IN_USE) --반납접수--> Rental(RETURN_PENDING, 주행거리 확정)
- *   Rental(RETURN_PENDING) --정산성공--> Rental(COMPLETED) + Reservation(COMPLETED)
+ *   Rental(IN_USE) --연장--> 반납 시각 연장 (뒤 예약과 충돌 시 409)
+ *   Rental(IN_USE) --반납하기--> Rental(RETURN_PENDING, 주행거리 자동 확정)
+ *   Rental(RETURN_PENDING) --정산성공--> COMPLETED (+ 편도면 차량 존 이동)
  *
- * 정산 결제가 실패하면 RETURN_PENDING에 머물고 재시도(settle)가 가능하다.
+ * 주행거리는 차량 텔레메트리가 알려주는 값이라 사용자 입력이 없다 —
+ * 데모에서는 이용 시간 기반 모의값을 서버가 생성한다.
  */
 @Injectable()
 export class RentalsService {
@@ -49,12 +57,93 @@ export class RentalsService {
     });
   }
 
-  /** 반납 접수: 주행거리 확정 후 정산 시도 */
-  async requestReturn(user: JwtUser, rentalId: string, distanceKm: number) {
-    if (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > 5000) {
-      throw new BadRequestException('주행거리가 올바르지 않습니다');
-    }
+  /** 이용 중 반납 시각 연장 — 뒤 예약과 충돌하면 409 (EXCLUDE 제약이 최종 방어) */
+  async extend(user: JwtUser, rentalId: string, dto: ExtendRentalDto) {
+    const newEndAt = new Date(dto.endAt);
 
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const rental = await this.ownedRental(tx, user, rentalId);
+        if (rental.status !== 'IN_USE') throw new BadRequestException('이용 중일 때만 연장할 수 있습니다');
+
+        const resv = rental.reservation;
+        if (newEndAt.getTime() <= resv.endAt.getTime()) {
+          throw new BadRequestException('현재 반납 시각 이후로만 연장할 수 있습니다');
+        }
+        const rangeError = validateSlotRange(resv.startAt, newEndAt);
+        if (rangeError) throw new BadRequestException(rangeError);
+
+        // 연장 구간 충돌 사전 확인 (자기 예약 제외)
+        const conflict = await tx.reservation.findFirst({
+          where: {
+            vehicleId: resv.vehicleId,
+            id: { not: resv.id },
+            status: { in: ['CONFIRMED', 'IN_USE'] },
+            startAt: { lt: newEndAt },
+            endAt: { gt: resv.endAt },
+          },
+          select: { startAt: true },
+        });
+        if (conflict) {
+          throw new ConflictException('연장하려는 시간에 다음 예약이 있어요');
+        }
+
+        // 연장분 요금 = 연장 구간의 대여요금 + 면책상품 (전용 차량은 무료)
+        const isDedicated = rental.reservation.vehicle.corporationId !== null;
+        let extRentalFee = 0;
+        let extInsuranceFee = 0;
+        if (!isDedicated) {
+          const plan = await tx.pricingPlan.findUniqueOrThrow({
+            where: { id: rental.reservation.vehicle.planId },
+          });
+          const ext = quote({
+            plan,
+            startAt: resv.endAt,
+            endAt: newEndAt,
+            insurance: resv.insurance,
+          });
+          extRentalFee = ext.rentalFeeKrw;
+          extInsuranceFee = ext.insuranceFeeKrw;
+        }
+        const extensionFee = extRentalFee + extInsuranceFee;
+
+        if (extensionFee > 0) {
+          const upfront = await tx.payment.findFirst({
+            where: { reservationId: resv.id, kind: 'UPFRONT' },
+          });
+          await this.payments.charge(tx, {
+            reservationId: resv.id,
+            kind: 'UPFRONT',
+            amountKrw: extensionFee,
+            idempotencyKey: dto.idempotencyKey,
+            cardLast4: upfront?.cardLast4 ?? '4242',
+          });
+        }
+
+        await tx.reservation.update({
+          where: { id: resv.id },
+          data: {
+            endAt: newEndAt,
+            rentalFeeKrw: { increment: extRentalFee },
+            insuranceFeeKrw: { increment: extInsuranceFee },
+            totalUpfrontKrw: { increment: extensionFee },
+          },
+        });
+        return tx.rental.findUniqueOrThrow({
+          where: { id: rentalId },
+          include: { reservation: { include: { payments: true } } },
+        });
+      });
+    } catch (e) {
+      if (isOverlapViolation(e)) {
+        throw new ConflictException('연장하려는 시간에 다음 예약이 있어요');
+      }
+      throw e;
+    }
+  }
+
+  /** 반납 접수: 텔레메트리(모의)로 주행거리 자동 확정 후 정산 */
+  async requestReturn(user: JwtUser, rentalId: string) {
     await this.prisma.$transaction(async (tx) => {
       const rental = await this.ownedRental(tx, user, rentalId);
       if (rental.status !== 'IN_USE') throw new BadRequestException('이용 중인 대여만 반납할 수 있습니다');
@@ -62,6 +151,13 @@ export class RentalsService {
       const returnedAt = new Date();
       const lateMs = returnedAt.getTime() - rental.reservation.endAt.getTime();
       const lateMinutes = Math.max(0, Math.ceil(lateMs / 60000));
+
+      // 텔레메트리 모의: 이용 경과시간 × 15~35km/h
+      const elapsedHours = Math.max(
+        (returnedAt.getTime() - rental.startedAt.getTime()) / 3600000,
+        0.05,
+      );
+      const distanceKm = Math.round(elapsedHours * (15 + Math.random() * 20) * 10) / 10;
 
       await tx.rental.update({
         where: { id: rentalId },
@@ -72,7 +168,7 @@ export class RentalsService {
     return this.settleReturn(user, rentalId);
   }
 
-  /** 주행요금 + 지연요금 정산 (실패 시 재시도 가능) */
+  /** 주행요금 + 지연요금 정산 (실패 시 재시도 가능). 편도면 차량을 반납 존으로 이동 */
   async settleReturn(user: JwtUser, rentalId: string) {
     return this.prisma.$transaction(async (tx) => {
       const rental = await this.ownedRental(tx, user, rentalId);
@@ -88,6 +184,7 @@ export class RentalsService {
         });
         s = settle({
           plan,
+          fuel: rental.reservation.vehicle.fuel,
           distanceKm: rental.distanceKm ?? 0,
           lateMinutes: rental.lateMinutes,
         });
@@ -110,6 +207,15 @@ export class RentalsService {
         where: { id: rental.reservationId },
         data: { status: 'COMPLETED' },
       });
+
+      // 편도: 차량의 물리적 위치를 반납 존으로 갱신 (이후 탐색은 새 존 기준)
+      if (rental.reservation.returnZoneId) {
+        await tx.vehicle.update({
+          where: { id: rental.reservation.vehicleId },
+          data: { zoneId: rental.reservation.returnZoneId },
+        });
+      }
+
       return tx.rental.update({
         where: { id: rentalId },
         data: {
@@ -117,7 +223,7 @@ export class RentalsService {
           driveFeeKrw: s.driveFeeKrw,
           lateFeeKrw: s.lateFeeKrw,
         },
-        include: { reservation: { include: { payments: true } } },
+        include: { reservation: { include: { payments: true, returnZone: true } } },
       });
     });
   }

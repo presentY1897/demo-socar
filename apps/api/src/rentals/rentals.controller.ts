@@ -1,12 +1,12 @@
 import { Body, Controller, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
+import { extendRentalSchema, type ExtendRentalDto } from '@socar/shared';
 import { CurrentUser } from '../auth/decorators';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RentalsService } from './rentals.service';
 
 const startSchema = z.object({ reservationId: z.string().min(1) });
-const returnSchema = z.object({ distanceKm: z.number().min(0).max(5000) });
 
 @Controller('rentals')
 export class RentalsController {
@@ -20,13 +20,20 @@ export class RentalsController {
     return this.rentals.start(user, dto.reservationId);
   }
 
-  @Post(':id/return')
-  requestReturn(
+  /** 이용 중 반납 시각 연장 */
+  @Post(':id/extend')
+  extend(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(returnSchema)) dto: { distanceKm: number },
+    @Body(new ZodValidationPipe(extendRentalSchema)) dto: ExtendRentalDto,
   ) {
-    return this.rentals.requestReturn(user, id, dto.distanceKm);
+    return this.rentals.extend(user, id, dto);
+  }
+
+  /** 반납하기 — 주행거리는 텔레메트리(모의)로 자동 확정 */
+  @Post(':id/return')
+  requestReturn(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.rentals.requestReturn(user, id);
   }
 
   @Post(':id/settle')

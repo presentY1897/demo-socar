@@ -6,15 +6,31 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { quote, SLOT_MS, validateSlotRange, type CreateReservationDto, type QuoteRequestDto } from '@socar/shared';
+import {
+  haversineMeters,
+  onewayFee,
+  quote,
+  SLOT_MS,
+  validateSlotRange,
+  type CreateReservationDto,
+  type ModifyReservationDto,
+  type QuoteBreakdown,
+  type QuoteRequestDto,
+} from '@socar/shared';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { effectiveZoneIdAt } from '../common/vehicle-location';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 
 /** PostgreSQL exclusion_violation (EXCLUDE USING GIST) 여부 */
 function isOverlapViolation(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return msg.includes('23P01') || msg.includes('reservation_no_overlap');
+}
+
+interface QuoteResult {
+  breakdown: QuoteBreakdown;
+  returnZoneId: string | null;
 }
 
 @Injectable()
@@ -24,11 +40,20 @@ export class ReservationsService {
     private readonly payments: PaymentsService,
   ) {}
 
-  /** 쿠폰/크레딧을 반영한 서버 기준 견적 (결제 금액의 단일 진실 원천) */
-  async quoteFor(db: Prisma.TransactionClient, userId: string, dto: QuoteRequestDto) {
+  /**
+   * 쿠폰/크레딧/편도 수수료를 반영한 서버 기준 견적 (결제 금액의 단일 진실 원천).
+   * 편도면 출발 존은 "시작 시각의 유효 위치"(편도 체인 반영) 기준으로 수수료를 계산한다.
+   */
+  async quoteFor(db: Prisma.TransactionClient, userId: string, dto: QuoteRequestDto): Promise<QuoteResult> {
     const vehicle = await db.vehicle.findUnique({
       where: { id: dto.vehicleId },
-      include: { plan: true },
+      include: {
+        plan: true,
+        reservations: {
+          where: { status: { in: ['CONFIRMED', 'IN_USE'] } },
+          select: { startAt: true, endAt: true, returnZoneId: true },
+        },
+      },
     });
     if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
     if (vehicle.status !== 'AVAILABLE') {
@@ -36,6 +61,31 @@ export class ReservationsService {
     }
     if (vehicle.corporationId !== null) {
       throw new BadRequestException('법인 전용 차량은 오피스 배차를 통해서만 이용할 수 있습니다');
+    }
+
+    // 편도 반납 존 검증 + 수수료
+    let onewayFeeKrw = 0;
+    let returnZoneId: string | null = null;
+    if (dto.returnZoneId) {
+      const startZoneId = effectiveZoneIdAt(
+        vehicle.zoneId,
+        vehicle.reservations,
+        new Date(dto.startAt),
+      );
+      if (dto.returnZoneId !== startZoneId) {
+        const [startZone, returnZone] = await Promise.all([
+          db.zone.findUnique({ where: { id: startZoneId } }),
+          db.zone.findUnique({ where: { id: dto.returnZoneId } }),
+        ]);
+        if (!returnZone || returnZone.corporationId !== null) {
+          throw new NotFoundException('반납 존을 찾을 수 없습니다');
+        }
+        if (!startZone || returnZone.region !== startZone.region) {
+          throw new BadRequestException('같은 지역의 존으로만 편도 반납이 가능합니다');
+        }
+        onewayFeeKrw = onewayFee(haversineMeters(startZone, returnZone));
+        returnZoneId = returnZone.id;
+      }
     }
 
     let couponDiscountKrw = 0;
@@ -61,46 +111,12 @@ export class ReservationsService {
       startAt: new Date(dto.startAt),
       endAt: new Date(dto.endAt),
       insurance: dto.insurance,
+      onewayFeeKrw,
       couponDiscountKrw,
       creditBalanceKrw,
       useCredit: dto.useCredit,
     });
-    return { vehicle, breakdown };
-  }
-
-  /**
-   * 법인 전용 차량(FMS)은 이용 과금이 없다 — 소속 법인의 배차 승인 경로에서만 0원 예약.
-   * 그 외에는 일반 견적(quoteFor)을 따른다.
-   */
-  private async resolveBreakdown(
-    tx: Prisma.TransactionClient,
-    user: JwtUser,
-    dto: CreateReservationDto,
-    startAt: Date,
-    endAt: Date,
-    opts: { corporateDedicated?: boolean },
-  ) {
-    if (!opts.corporateDedicated) {
-      return (await this.quoteFor(tx, user.id, dto)).breakdown;
-    }
-
-    const vehicle = await tx.vehicle.findUnique({ where: { id: dto.vehicleId } });
-    if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
-    if (vehicle.status !== 'AVAILABLE') {
-      throw new ConflictException('현재 이용할 수 없는 차량입니다 (정비 중)');
-    }
-    if (vehicle.corporationId === null || vehicle.corporationId !== user.corporationId) {
-      throw new BadRequestException('소속 법인의 전용 차량이 아닙니다');
-    }
-
-    return {
-      slotCount: Math.round((endAt.getTime() - startAt.getTime()) / SLOT_MS),
-      rentalFeeKrw: 0,
-      insuranceFeeKrw: 0,
-      discountKrw: 0,
-      creditUsedKrw: 0,
-      totalUpfrontKrw: 0,
-    };
+    return { breakdown, returnZoneId };
   }
 
   async create(
@@ -119,24 +135,10 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const breakdown = await this.resolveBreakdown(tx, user, dto, startAt, endAt, opts);
+        const { breakdown, returnZoneId } = await this.resolveQuote(tx, user, dto, startAt, endAt, opts);
 
         // 1차 확인: 겹치는 예약이 있으면 친절한 409 (최종 방어는 DB EXCLUDE 제약)
-        const conflicts = await tx.reservation.findMany({
-          where: {
-            vehicleId: dto.vehicleId,
-            status: { in: ['CONFIRMED', 'IN_USE'] },
-            startAt: { lt: endAt },
-            endAt: { gt: startAt },
-          },
-          select: { startAt: true, endAt: true },
-        });
-        if (conflicts.length > 0) {
-          throw new ConflictException({
-            message: '선택한 시간에 이미 예약이 있습니다',
-            busy: conflicts,
-          });
-        }
+        await this.assertNoOverlap(tx, dto.vehicleId, startAt, endAt);
 
         const reservation = await tx.reservation.create({
           data: {
@@ -145,8 +147,10 @@ export class ReservationsService {
             startAt,
             endAt,
             insurance: dto.insurance,
+            returnZoneId,
             rentalFeeKrw: breakdown.rentalFeeKrw,
             insuranceFeeKrw: breakdown.insuranceFeeKrw,
+            onewayFeeKrw: breakdown.onewayFeeKrw,
             discountKrw: breakdown.discountKrw,
             creditUsedKrw: breakdown.creditUsedKrw,
             totalUpfrontKrw: breakdown.totalUpfrontKrw,
@@ -180,7 +184,11 @@ export class ReservationsService {
 
         return tx.reservation.findUniqueOrThrow({
           where: { id: reservation.id },
-          include: { vehicle: { include: { zone: true, plan: true } }, payments: true },
+          include: {
+            vehicle: { include: { zone: true, plan: true } },
+            returnZone: true,
+            payments: true,
+          },
         });
       });
     } catch (e) {
@@ -191,10 +199,109 @@ export class ReservationsService {
     }
   }
 
+  /**
+   * 이용 전 예약 시간 변경.
+   * 쿠폰 할인과 기존 크레딧 사용분은 유지하고, 선결제 차액만 추가 결제하거나
+   * 크레딧으로 환급한다 (모의 PG에는 부분 환불이 없다 — ADR-002).
+   */
+  async modify(user: JwtUser, id: string, dto: ModifyReservationDto) {
+    const startAt = new Date(dto.startAt);
+    const endAt = new Date(dto.endAt);
+    const rangeError = validateSlotRange(startAt, endAt);
+    if (rangeError) throw new BadRequestException(rangeError);
+    if (startAt.getTime() < Date.now() - 60_000) {
+      throw new BadRequestException('과거 시각으로는 변경할 수 없습니다');
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const resv = await tx.reservation.findUnique({
+          where: { id },
+          include: { vehicle: { include: { plan: true } }, coupon: true },
+        });
+        if (!resv) throw new NotFoundException('예약을 찾을 수 없습니다');
+        if (resv.userId !== user.id) throw new ForbiddenException('본인 예약만 변경할 수 있습니다');
+        if (resv.status !== 'CONFIRMED') throw new BadRequestException('이용 전 예약만 변경할 수 있습니다');
+        if (resv.startAt.getTime() <= Date.now()) {
+          throw new BadRequestException('시작 시각이 지난 예약은 변경할 수 없습니다');
+        }
+
+        await this.assertNoOverlap(tx, resv.vehicleId, startAt, endAt, id);
+
+        const breakdown = quote({
+          plan: resv.vehicle.plan,
+          startAt,
+          endAt,
+          insurance: resv.insurance,
+          onewayFeeKrw: resv.onewayFeeKrw, // 편도 반납 존 변경은 미지원
+          couponDiscountKrw: resv.coupon?.discountKrw ?? 0,
+          creditBalanceKrw: resv.creditUsedKrw, // 기존 사용분 한도 내 유지
+          useCredit: resv.creditUsedKrw > 0,
+        });
+
+        const creditRefund = resv.creditUsedKrw - breakdown.creditUsedKrw;
+        if (creditRefund > 0) {
+          await tx.creditLedger.create({
+            data: {
+              userId: user.id,
+              deltaKrw: creditRefund,
+              reason: 'REFUND',
+              reservationId: id,
+              memo: '예약 변경 크레딧 환급',
+            },
+          });
+        }
+
+        const delta = breakdown.totalUpfrontKrw - resv.totalUpfrontKrw;
+        if (delta > 0) {
+          const upfront = await tx.payment.findFirst({
+            where: { reservationId: id, kind: 'UPFRONT' },
+          });
+          await this.payments.charge(tx, {
+            reservationId: id,
+            kind: 'UPFRONT',
+            amountKrw: delta,
+            idempotencyKey: dto.idempotencyKey,
+            cardLast4: upfront?.cardLast4 ?? '4242',
+          });
+        } else if (delta < 0) {
+          await tx.creditLedger.create({
+            data: {
+              userId: user.id,
+              deltaKrw: -delta,
+              reason: 'REFUND',
+              reservationId: id,
+              memo: '예약 변경 차액 환급 (크레딧)',
+            },
+          });
+        }
+
+        return tx.reservation.update({
+          where: { id },
+          data: {
+            startAt,
+            endAt,
+            rentalFeeKrw: breakdown.rentalFeeKrw,
+            insuranceFeeKrw: breakdown.insuranceFeeKrw,
+            discountKrw: breakdown.discountKrw,
+            creditUsedKrw: breakdown.creditUsedKrw,
+            totalUpfrontKrw: breakdown.totalUpfrontKrw,
+          },
+          include: { vehicle: { include: { zone: true } }, returnZone: true, payments: true },
+        });
+      });
+    } catch (e) {
+      if (isOverlapViolation(e)) {
+        throw new ConflictException('변경하려는 시간에 이미 예약이 있습니다');
+      }
+      throw e;
+    }
+  }
+
   async listMine(userId: string) {
     return this.prisma.reservation.findMany({
       where: { userId },
-      include: { vehicle: { include: { zone: true } }, rental: true },
+      include: { vehicle: { include: { zone: true } }, returnZone: true, rental: true },
       orderBy: { startAt: 'desc' },
       take: 50,
     });
@@ -205,6 +312,7 @@ export class ReservationsService {
       where: { id },
       include: {
         vehicle: { include: { zone: true, plan: true } },
+        returnZone: true,
         payments: { orderBy: { createdAt: 'asc' } },
         rental: true,
         coupon: true,
@@ -252,5 +360,73 @@ export class ReservationsService {
         data: { status: 'CANCELED', canceledAt: new Date() },
       });
     });
+  }
+
+  /** 겹치는 예약이 있으면 친절한 409 (자기 자신은 제외) */
+  private async assertNoOverlap(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeId?: string,
+  ) {
+    const conflicts = await tx.reservation.findMany({
+      where: {
+        vehicleId,
+        id: excludeId ? { not: excludeId } : undefined,
+        status: { in: ['CONFIRMED', 'IN_USE'] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+      select: { startAt: true, endAt: true },
+    });
+    if (conflicts.length > 0) {
+      throw new ConflictException({
+        message: '선택한 시간에 이미 예약이 있습니다',
+        busy: conflicts,
+      });
+    }
+  }
+
+  /**
+   * 법인 전용 차량(FMS)은 이용 과금이 없다 — 소속 법인의 배차 승인 경로에서만 0원 예약.
+   * 그 외에는 일반 견적(quoteFor)을 따른다.
+   */
+  private async resolveQuote(
+    tx: Prisma.TransactionClient,
+    user: JwtUser,
+    dto: CreateReservationDto,
+    startAt: Date,
+    endAt: Date,
+    opts: { corporateDedicated?: boolean },
+  ): Promise<QuoteResult> {
+    if (!opts.corporateDedicated) {
+      return this.quoteFor(tx, user.id, dto);
+    }
+
+    if (dto.returnZoneId) {
+      throw new BadRequestException('법인 전용 차량은 왕복만 가능합니다');
+    }
+    const vehicle = await tx.vehicle.findUnique({ where: { id: dto.vehicleId } });
+    if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
+    if (vehicle.status !== 'AVAILABLE') {
+      throw new ConflictException('현재 이용할 수 없는 차량입니다 (정비 중)');
+    }
+    if (vehicle.corporationId === null || vehicle.corporationId !== user.corporationId) {
+      throw new BadRequestException('소속 법인의 전용 차량이 아닙니다');
+    }
+
+    return {
+      returnZoneId: null,
+      breakdown: {
+        slotCount: Math.round((endAt.getTime() - startAt.getTime()) / SLOT_MS),
+        rentalFeeKrw: 0,
+        insuranceFeeKrw: 0,
+        onewayFeeKrw: 0,
+        discountKrw: 0,
+        creditUsedKrw: 0,
+        totalUpfrontKrw: 0,
+      },
+    };
   }
 }

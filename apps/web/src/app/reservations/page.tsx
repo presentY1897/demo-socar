@@ -13,6 +13,7 @@ interface ReservationRow {
   status: string;
   totalUpfrontKrw: number;
   vehicle: { modelName: string; plateNo: string; zone: { name: string } };
+  returnZone: { name: string } | null;
   rental: { status: string } | null;
 }
 
@@ -62,7 +63,10 @@ export default function ReservationsPage() {
               {fmtDateTime(r.startAt)} ~ {fmtDateTime(r.endAt)}
             </p>
             <p className="mt-1 text-xs text-gray-400">
-              {r.vehicle.zone.name} · {krw(r.totalUpfrontKrw)}
+              {r.vehicle.zone.name}
+              {r.returnZone && <span className="text-indigo-500"> → {r.returnZone.name} (편도)</span>}
+              {' · '}
+              {krw(r.totalUpfrontKrw)}
             </p>
           </Link>
         ))}

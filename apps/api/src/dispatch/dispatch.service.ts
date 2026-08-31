@@ -13,6 +13,7 @@ import {
 } from '@socar/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
+import { effectiveZoneIdAt } from '../common/vehicle-location';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 import { rankCandidates, type CandidateInput } from './scoring';
 import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from './travel/travel-time';
@@ -95,11 +96,10 @@ export class DispatchService {
         OR: [{ corporationId: null }, { corporationId: request.corporationId }],
       },
       include: {
+        // 미완료 예약 전체 — 겹침·직전 버퍼·편도 위치 체인 계산에 사용
         reservations: {
           where: {
             status: { in: ['CONFIRMED', 'IN_USE'] },
-            // 직전 예약 버퍼 계산을 위해 하루 전부터 조회
-            endAt: { gt: new Date(request.desiredStartAt.getTime() - 24 * 3600 * 1000) },
             startAt: { lt: request.desiredEndAt },
           },
           orderBy: { endAt: 'asc' },
@@ -134,10 +134,12 @@ export class DispatchService {
     }
     const fleetAvgPct = fleetTotal > 0 ? (fleetLate / fleetTotal) * 100 : 0;
 
-    // 4) 이동시간 추정 + 스코어링
+    // 4) 이동시간 추정 + 스코어링 — 존 위치는 편도 체인 반영 (희망 시작 시각 기준)
     const inputs: CandidateInput[] = [];
     for (const v of feasible) {
-      const zone = zoneById.get(v.zoneId)!;
+      const effZoneId = effectiveZoneIdAt(v.zoneId, v.reservations, request.desiredStartAt);
+      const zone = zoneById.get(effZoneId);
+      if (!zone) continue; // 편도로 반경 밖에 있을 예정인 차량
       const est = await this.travel.estimateWalk(
         origin,
         { lat: zone.lat, lng: zone.lng },

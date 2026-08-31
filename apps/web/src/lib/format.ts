@@ -29,8 +29,10 @@ export const DISPATCH_STATUS_LABEL: Record<string, string> = {
   CANCELED: '취소됨',
 };
 
-export const INSURANCE_LABEL: Record<string, string> = {
-  LIGHT: '라이트',
-  STANDARD: '스탠다드',
-  FULL: '풀커버',
-};
+import { INSURANCE_META } from '@socar/shared';
+
+/** 자기부담금 한도 기준 면책상품 명칭 (실속/표준/완전보장) */
+export const INSURANCE_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(INSURANCE_META).map(([k, v]) => [k, v.label]),
+);
+export { INSURANCE_META };

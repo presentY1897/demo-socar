@@ -5,30 +5,30 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import { api, ApiError, swrFetcher } from '@/lib/api';
-import {
-  fmtDateTime,
-  INSURANCE_LABEL,
-  krw,
-  RESERVATION_STATUS_LABEL,
-} from '@/lib/format';
+import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/lib/format';
+import { fromParts, TIMES_10MIN, toDatePart, toTimePart } from '@/lib/timerange';
+import { TimeRangePicker } from '@/components/TimeRangePicker';
 
 interface Detail {
   id: string;
   startAt: string;
   endAt: string;
   status: string;
-  insurance: string;
+  insurance: 'LIGHT' | 'STANDARD' | 'FULL';
   rentalFeeKrw: number;
   insuranceFeeKrw: number;
+  onewayFeeKrw: number;
   discountKrw: number;
   creditUsedKrw: number;
   totalUpfrontKrw: number;
   vehicle: {
     modelName: string;
     plateNo: string;
+    fuel: string;
     zone: { name: string; address: string };
     plan: { perKmKrw: number };
   };
+  returnZone: { name: string } | null;
   payments: {
     id: string;
     kind: string;
@@ -50,7 +50,7 @@ interface Detail {
 }
 
 const PAYMENT_KIND_LABEL: Record<string, string> = {
-  UPFRONT: '대여요금 선결제',
+  UPFRONT: '대여요금 결제',
   DRIVE_SETTLEMENT: '주행요금 정산',
   PENALTY: '페널티',
 };
@@ -69,8 +69,10 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [distanceKm, setDistanceKm] = useState('');
-  const [showReturn, setShowReturn] = useState(false);
+  const [showModify, setShowModify] = useState(false);
+  const [modifyRange, setModifyRange] = useState<{ startAt: string; endAt: string } | null>(null);
+  const [showExtend, setShowExtend] = useState(false);
+  const [extendEnd, setExtendEnd] = useState<string | null>(null);
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -78,7 +80,8 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
     try {
       await fn();
       await mutate();
-      setShowReturn(false);
+      setShowModify(false);
+      setShowExtend(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '요청에 실패했습니다');
     } finally {
@@ -92,7 +95,7 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
     data.status === 'CONFIRMED' &&
     dayjs().isAfter(dayjs(data.startAt).subtract(10, 'minute')) &&
     dayjs().isBefore(dayjs(data.endAt));
-  const canCancel = data.status === 'CONFIRMED' && dayjs().isBefore(dayjs(data.startAt));
+  const beforeStart = data.status === 'CONFIRMED' && dayjs().isBefore(dayjs(data.startAt));
 
   return (
     <div className="mx-auto max-w-lg px-4 py-4">
@@ -112,7 +115,14 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
           {fmtDateTime(data.startAt)} ~ {fmtDateTime(data.endAt)}
         </p>
         <p className="mt-1 text-xs text-gray-400">
-          {data.vehicle.zone.name} · {data.vehicle.zone.address} · {INSURANCE_LABEL[data.insurance]}
+          {data.vehicle.zone.name}
+          {data.returnZone ? (
+            <span className="text-indigo-500"> → {data.returnZone.name} (편도)</span>
+          ) : (
+            ' (왕복)'
+          )}
+          {' · '}
+          {INSURANCE_META[data.insurance].label}
         </p>
       </div>
 
@@ -123,44 +133,70 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
           <p className="mt-1 text-sm text-green-700">
             {fmtDateTime(data.rental.startedAt)}에 시작 · 반납 예정 {fmtDateTime(data.endAt)}
           </p>
-          {data.rental.status === 'IN_USE' && !showReturn && (
-            <button
-              onClick={() => setShowReturn(true)}
-              className="mt-3 w-full rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white"
-            >
-              반납하기
-            </button>
-          )}
-          {showReturn && (
-            <div className="mt-3 rounded-lg bg-white p-3">
-              <label className="text-sm text-gray-600">주행거리 입력 (km) — 실제로는 차량 텔레메트리</label>
-              <input
-                type="number"
-                min={0}
-                value={distanceKm}
-                onChange={(e) => setDistanceKm(e.target.value)}
-                placeholder="예: 23.5"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-              <p className="mt-1 text-xs text-gray-400">
-                주행요금 {krw(data.vehicle.plan.perKmKrw)}/km · 지연 반납 시 분당 200원
-              </p>
+
+          {data.rental.status === 'IN_USE' && (
+            <div className="mt-3 flex gap-2">
               <button
-                disabled={busy || distanceKm === ''}
+                onClick={() => {
+                  setExtendEnd(dayjs(data.endAt).add(30, 'minute').toISOString());
+                  setShowExtend((v) => !v);
+                }}
+                className="flex-1 rounded-lg border border-green-500 bg-white py-2.5 text-sm font-semibold text-green-700"
+              >
+                반납 연장
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => act(() => api(`/rentals/${data.rental!.id}/return`, { method: 'POST' }))}
+                className="flex-1 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {busy ? '정산 중...' : '반납하기'}
+              </button>
+            </div>
+          )}
+          {data.rental.status === 'IN_USE' && (
+            <p className="mt-2 text-[11px] text-green-700/70">
+              존에 주차하고 차 문을 잠근 뒤 반납하기를 누르세요. 주행거리와 요금은 자동 정산돼요
+            </p>
+          )}
+
+          {showExtend && extendEnd && (
+            <div className="mt-3 rounded-lg bg-white p-3">
+              <p className="text-sm font-medium">새 반납 시각</p>
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  type="date"
+                  value={toDatePart(extendEnd)}
+                  onChange={(e) => setExtendEnd(fromParts(e.target.value, toTimePart(extendEnd)))}
+                  className="flex-1 rounded-md border border-gray-300 px-1.5 py-1 text-xs"
+                />
+                <select
+                  value={toTimePart(extendEnd)}
+                  onChange={(e) => setExtendEnd(fromParts(toDatePart(extendEnd), e.target.value))}
+                  className="rounded-md border border-gray-300 px-1 py-1 text-xs tabular-nums"
+                >
+                  {TIMES_10MIN.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                disabled={busy}
                 onClick={() =>
                   act(() =>
-                    api(`/rentals/${data.rental!.id}/return`, {
+                    api(`/rentals/${data.rental!.id}/extend`, {
                       method: 'POST',
-                      body: { distanceKm: Number(distanceKm) },
+                      body: { endAt: extendEnd, idempotencyKey: crypto.randomUUID() },
                     }),
                   )
                 }
                 className="mt-2 w-full rounded-lg bg-green-600 py-2 text-sm font-semibold text-white disabled:opacity-40"
               >
-                {busy ? '정산 중...' : '반납 및 정산'}
+                연장하기 (연장분 요금 결제)
               </button>
             </div>
           )}
+
           {data.rental.status === 'RETURN_PENDING' && (
             <button
               disabled={busy}
@@ -173,26 +209,63 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* 액션 */}
-      {(canStart || canCancel) && (
-        <div className="mt-4 flex gap-2">
+      {/* 이용 전 액션 */}
+      {(canStart || beforeStart) && (
+        <div className="mt-4 space-y-2">
           {canStart && (
             <button
               disabled={busy}
               onClick={() => act(() => api('/rentals/start', { method: 'POST', body: { reservationId: data.id } }))}
-              className="flex-1 rounded-xl bg-sky-500 py-3 font-semibold text-white disabled:opacity-40"
+              className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-white disabled:opacity-40"
             >
               🔓 스마트키 — 이용 시작
             </button>
           )}
-          {canCancel && (
-            <button
-              disabled={busy}
-              onClick={() => act(() => api(`/reservations/${data.id}/cancel`, { method: 'POST' }))}
-              className="flex-1 rounded-xl border border-red-200 bg-white py-3 font-semibold text-red-500 disabled:opacity-40"
-            >
-              예약 취소
-            </button>
+          {beforeStart && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setModifyRange({ startAt: data.startAt, endAt: data.endAt });
+                  setShowModify((v) => !v);
+                }}
+                className="flex-1 rounded-xl border border-sky-300 bg-white py-3 font-semibold text-sky-600"
+              >
+                시간 변경
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => act(() => api(`/reservations/${data.id}/cancel`, { method: 'POST' }))}
+                className="flex-1 rounded-xl border border-red-200 bg-white py-3 font-semibold text-red-500 disabled:opacity-40"
+              >
+                예약 취소
+              </button>
+            </div>
+          )}
+          {showModify && modifyRange && (
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <TimeRangePicker
+                startAt={modifyRange.startAt}
+                endAt={modifyRange.endAt}
+                onChange={(startAt, endAt) => setModifyRange({ startAt, endAt })}
+              />
+              <p className="mt-2 text-[11px] text-gray-400">
+                차액은 추가 결제되거나 크레딧으로 환급돼요
+              </p>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  act(() =>
+                    api(`/reservations/${data.id}`, {
+                      method: 'PATCH',
+                      body: { ...modifyRange, idempotencyKey: crypto.randomUUID() },
+                    }),
+                  )
+                }
+                className="mt-2 w-full rounded-lg bg-sky-500 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                이 시간으로 변경
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -207,14 +280,18 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
         <h2 className="font-semibold">요금 내역</h2>
         <div className="mt-2 space-y-1">
           <Row label="대여요금" value={krw(data.rentalFeeKrw)} />
-          <Row label="면책상품" value={krw(data.insuranceFeeKrw)} />
+          <Row label={`면책상품 (${INSURANCE_META[data.insurance].label})`} value={krw(data.insuranceFeeKrw)} />
+          {data.onewayFeeKrw > 0 && <Row label="편도 수수료" value={krw(data.onewayFeeKrw)} />}
           {data.discountKrw > 0 && <Row label="쿠폰 할인" value={`-${krw(data.discountKrw)}`} />}
           {data.creditUsedKrw > 0 && <Row label="크레딧" value={`-${krw(data.creditUsedKrw)}`} />}
           <Row label="선결제 합계" value={krw(data.totalUpfrontKrw)} bold />
           {data.rental?.driveFeeKrw != null && (
             <>
               <div className="border-t border-dashed pt-1" />
-              <Row label={`주행요금 (${data.rental.distanceKm}km)`} value={krw(data.rental.driveFeeKrw)} />
+              <Row
+                label={`주행요금 (${data.rental.distanceKm}km${data.vehicle.fuel === 'EV' ? ', 전기차 무료' : ', 30km 무료'})`}
+                value={krw(data.rental.driveFeeKrw)}
+              />
               {(data.rental.lateFeeKrw ?? 0) > 0 && (
                 <Row label={`지연 반납 (${data.rental.lateMinutes}분)`} value={krw(data.rental.lateFeeKrw!)} />
               )}

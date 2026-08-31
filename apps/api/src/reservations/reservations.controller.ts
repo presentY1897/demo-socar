@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
   createReservationSchema,
+  modifyReservationSchema,
   quoteRequestSchema,
   type CreateReservationDto,
+  type ModifyReservationDto,
   type QuoteRequestDto,
   validateSlotRange,
 } from '@socar/shared';
@@ -20,7 +22,7 @@ export class ReservationsController {
     private readonly prisma: PrismaService,
   ) {}
 
-  /** 결제 전 견적 (쿠폰/크레딧 반영) */
+  /** 결제 전 견적 (쿠폰/크레딧/편도 수수료 반영) */
   @Post('quote')
   async quote(
     @CurrentUser() user: JwtUser,
@@ -30,6 +32,16 @@ export class ReservationsController {
     if (rangeError) throw new BadRequestException(rangeError);
     const { breakdown } = await this.reservations.quoteFor(this.prisma, user.id, dto);
     return breakdown;
+  }
+
+  /** 이용 전 예약 시간 변경 (차액 추가 결제 / 크레딧 환급) */
+  @Patch(':id')
+  modify(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(modifyReservationSchema)) dto: ModifyReservationDto,
+  ) {
+    return this.reservations.modify(user, id, dto);
   }
 
   @Post()

@@ -6,6 +6,8 @@ import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { swrFetcher } from '@/lib/api';
 import { krw } from '@/lib/format';
+import { defaultRange, durationLabel } from '@/lib/timerange';
+import { TimeRangePicker } from '@/components/TimeRangePicker';
 import type { ZoneMarker } from '@/components/ZoneMap';
 
 const ZoneMap = dynamic(() => import('@/components/ZoneMap'), {
@@ -24,7 +26,8 @@ interface ZoneDetail {
     plateNo: string;
     fuel: string;
     seats: number;
-    plan: { name: string; baseHourlyKrw: number; weekendHourlyKrw: number; perKmKrw: number };
+    estimatedRentalKrw: number;
+    plan: { name: string; perKmKrw: number };
   }[];
 }
 
@@ -37,9 +40,16 @@ const REGION_LABEL: Record<string, string> = {
 const FUEL_LABEL: Record<string, string> = { EV: '전기', GASOLINE: '휘발유', HYBRID: '하이브리드' };
 
 export default function HomePage() {
-  const { data: zones } = useSWR<(ZoneMarker & { region: string })[]>('/zones', swrFetcher);
+  const [range, setRange] = useState(defaultRange);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { data: zone } = useSWR<ZoneDetail>(selectedId ? `/zones/${selectedId}` : null, swrFetcher);
+
+  const q = `startAt=${encodeURIComponent(range.startAt)}&endAt=${encodeURIComponent(range.endAt)}`;
+  const { data: zones } = useSWR<(ZoneMarker & { region: string })[]>(`/zones?${q}`, swrFetcher);
+  const { data: zone } = useSWR<ZoneDetail>(
+    selectedId ? `/zones/${selectedId}?${q}` : null,
+    swrFetcher,
+  );
 
   const regions = useMemo(() => {
     const grouped = new Map<string, (ZoneMarker & { region: string })[]>();
@@ -49,12 +59,43 @@ export default function HomePage() {
     return grouped;
   }, [zones]);
 
+  const rangeLabel = `${new Date(range.startAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' })} ~ ${new Date(range.endAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' })}`;
+
   return (
     <div className="relative" style={{ height: 'calc(100dvh - 7rem)' }}>
       <ZoneMap zones={zones ?? []} selectedId={selectedId} onSelect={setSelectedId} />
 
+      {/* 이용 시간 바 — 실제 앱처럼 시간을 먼저 정하고 차량을 찾는다 */}
+      <div className="absolute inset-x-3 top-3 z-[1000]">
+        <button
+          onClick={() => setPickerOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl bg-white/95 px-4 py-2.5 text-left shadow-lg"
+        >
+          <div>
+            <p className="text-[11px] text-gray-400">이용 시간 ({durationLabel(range.startAt, range.endAt)})</p>
+            <p className="text-sm font-semibold">{rangeLabel}</p>
+          </div>
+          <span className="text-gray-400">{pickerOpen ? '▲' : '▼'}</span>
+        </button>
+        {pickerOpen && (
+          <div className="mt-1.5 rounded-xl bg-white p-3 shadow-lg">
+            <TimeRangePicker
+              startAt={range.startAt}
+              endAt={range.endAt}
+              onChange={(startAt, endAt) => setRange({ startAt, endAt })}
+            />
+            <button
+              onClick={() => setPickerOpen(false)}
+              className="mt-2 w-full rounded-lg bg-sky-500 py-1.5 text-xs font-semibold text-white"
+            >
+              이 시간으로 찾기
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* 지역 점프 */}
-      <div className="absolute left-3 top-3 z-[1000] flex gap-1.5">
+      <div className="absolute left-3 top-[4.5rem] z-[999] flex gap-1.5">
         {[...regions.entries()].map(([region, list]) => (
           <button
             key={region}
@@ -78,12 +119,12 @@ export default function HomePage() {
           </div>
           <div className="space-y-2 px-4 pb-4">
             {zone?.vehicles.length === 0 && (
-              <p className="py-6 text-center text-sm text-gray-400">이용 가능한 차량이 없어요</p>
+              <p className="py-6 text-center text-sm text-gray-400">이 시간에 이용 가능한 차량이 없어요</p>
             )}
             {zone?.vehicles.map((v) => (
               <Link
                 key={v.id}
-                href={`/book/${v.id}`}
+                href={`/book/${v.id}?${q}`}
                 className="flex items-center justify-between rounded-xl border border-gray-200 p-3 hover:border-sky-400"
               >
                 <div>
@@ -93,11 +134,12 @@ export default function HomePage() {
                   </p>
                   <p className="mt-0.5 text-xs text-gray-500">
                     {FUEL_LABEL[v.fuel] ?? v.fuel} · {v.seats}인승 · {v.plan.name}
+                    {v.fuel === 'EV' && <span className="ml-1 text-green-600">주행요금 무료</span>}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-sky-600">{krw(v.plan.baseHourlyKrw)}/시간</p>
-                  <p className="text-[11px] text-gray-400">주행 {krw(v.plan.perKmKrw)}/km</p>
+                  <p className="text-sm font-bold text-sky-600">{krw(v.estimatedRentalKrw)}</p>
+                  <p className="text-[11px] text-gray-400">대여요금 · 면책 별도</p>
                 </div>
               </Link>
             ))}

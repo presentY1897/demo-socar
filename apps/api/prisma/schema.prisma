@@ -58,8 +58,9 @@ model Zone {
   capacity      Int
   corporationId String? // 값이 있으면 기업 전용존 — 일반 이용자에게 비노출
 
-  corporation Corporation? @relation(fields: [corporationId], references: [id])
+  corporation Corporation?  @relation(fields: [corporationId], references: [id])
   vehicles    Vehicle[]
+  onewayReturns Reservation[] @relation("returnZone") // 이 존으로 반납되는 편도 예약
 }
 
 model PricingPlan {
@@ -128,10 +129,12 @@ model Reservation {
   endAt     DateTime          @db.Timestamptz(3)
   status    ReservationStatus @default(CONFIRMED)
   insurance InsuranceTier
+  returnZoneId String? // 편도 예약: 반납 존 (null = 왕복)
 
   // 결제 시점 요금 스냅샷
   rentalFeeKrw    Int
   insuranceFeeKrw Int
+  onewayFeeKrw    Int     @default(0)
   discountKrw     Int     @default(0)
   creditUsedKrw   Int     @default(0)
   totalUpfrontKrw Int
@@ -140,9 +143,10 @@ model Reservation {
   createdAt  DateTime  @default(now())
   canceledAt DateTime?
 
-  user     User        @relation(fields: [userId], references: [id])
-  vehicle  Vehicle     @relation(fields: [vehicleId], references: [id])
-  coupon   Coupon?     @relation(fields: [couponId], references: [id])
+  user       User    @relation(fields: [userId], references: [id])
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id])
+  returnZone Zone?   @relation("returnZone", fields: [returnZoneId], references: [id])
+  coupon     Coupon? @relation(fields: [couponId], references: [id])
   payments Payment[]
   rental   Rental?
   dispatch DispatchRequest?
