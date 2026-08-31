@@ -51,12 +51,19 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
   const fallback = defaultRange();
   const startAt = params.get('startAt') ?? fallback.startAt;
   const endAt = params.get('endAt') ?? fallback.endAt;
+  // 홈의 '부름으로 가져와 이용' 후보에서 진입하면 부름 모드 + 검색 존 위치가 프리셋된다
+  const presetLat = params.get('dlat');
+  const presetLng = params.get('dlng');
+  const presetLabel = params.get('dlabel');
+  const hasPreset = presetLat !== null && presetLng !== null;
 
   const [insurance, setInsurance] = useState<'LIGHT' | 'STANDARD' | 'FULL'>('STANDARD');
   const [returnZoneId, setReturnZoneId] = useState('');
-  const [pickup, setPickup] = useState<'zone' | 'delivery'>('zone');
-  const [deliveryPos, setDeliveryPos] = useState<[number, number] | null>(null);
-  const [deliveryLabel, setDeliveryLabel] = useState('');
+  const [pickup, setPickup] = useState<'zone' | 'delivery'>(hasPreset ? 'delivery' : 'zone');
+  const [deliveryPos, setDeliveryPos] = useState<[number, number] | null>(
+    hasPreset ? [Number(presetLat), Number(presetLng)] : null,
+  );
+  const [deliveryLabel, setDeliveryLabel] = useState(presetLabel ?? '');
   const [couponId, setCouponId] = useState('');
   const [useCredit, setUseCredit] = useState(false);
   const [cardLast4, setCardLast4] = useState('4242');

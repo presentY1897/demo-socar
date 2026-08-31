@@ -15,20 +15,31 @@ const ZoneMap = dynamic(() => import('@/components/ZoneMap'), {
   loading: () => <div className="flex h-full items-center justify-center text-gray-400">지도를 불러오는 중...</div>,
 });
 
+interface ZoneVehicle {
+  id: string;
+  modelName: string;
+  plateNo: string;
+  fuel: string;
+  seats: number;
+  estimatedRentalKrw: number;
+  plan: { name: string; perKmKrw: number };
+}
+
+interface DeliverableVehicle extends ZoneVehicle {
+  fromZone: { id: string; name: string };
+  deliveryFeeEstimateKrw: number;
+  deliveryEtaMinutes: number;
+}
+
 interface ZoneDetail {
   id: string;
   name: string;
   address: string;
   region: string;
-  vehicles: {
-    id: string;
-    modelName: string;
-    plateNo: string;
-    fuel: string;
-    seats: number;
-    estimatedRentalKrw: number;
-    plan: { name: string; perKmKrw: number };
-  }[];
+  lat: number;
+  lng: number;
+  vehicles: ZoneVehicle[];
+  deliverable: DeliverableVehicle[];
 }
 
 const REGION_LABEL: Record<string, string> = {
@@ -118,8 +129,13 @@ export default function HomePage() {
             <button onClick={() => setSelectedId(null)} className="p-1 text-gray-400">✕</button>
           </div>
           <div className="space-y-2 px-4 pb-4">
-            {zone?.vehicles.length === 0 && (
+            {zone && zone.vehicles.length === 0 && zone.deliverable.length === 0 && (
               <p className="py-6 text-center text-sm text-gray-400">이 시간에 이용 가능한 차량이 없어요</p>
+            )}
+
+            {/* ① 바로 픽업 */}
+            {zone && zone.vehicles.length > 0 && (
+              <p className="pt-1 text-xs font-semibold text-gray-500">이 존에서 바로 이용</p>
             )}
             {zone?.vehicles.map((v) => (
               <Link
@@ -140,6 +156,36 @@ export default function HomePage() {
                 <div className="text-right">
                   <p className="text-sm font-bold text-sky-600">{krw(v.estimatedRentalKrw)}</p>
                   <p className="text-[11px] text-gray-400">대여요금 · 면책 별도</p>
+                </div>
+              </Link>
+            ))}
+
+            {/* ② 부름으로 가져와 이용 */}
+            {zone && zone.deliverable.length > 0 && (
+              <p className="pt-2 text-xs font-semibold text-indigo-500">
+                🚚 부름으로 가져와 이용 — 다른 존 차량을 배달받아요
+              </p>
+            )}
+            {zone?.deliverable.map((v) => (
+              <Link
+                key={v.id}
+                href={`/book/${v.id}?${q}&dlat=${zone.lat}&dlng=${zone.lng}&dlabel=${encodeURIComponent(`${zone.name} 근처`)}`}
+                className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 hover:border-indigo-400"
+              >
+                <div>
+                  <p className="font-semibold">
+                    {v.modelName}
+                    <span className="ml-2 text-xs font-normal text-gray-400">{v.plateNo}</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {v.fromZone.name}에서 배달 · 탁송 약 {v.deliveryEtaMinutes}분
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-indigo-600">
+                    {krw(v.estimatedRentalKrw + v.deliveryFeeEstimateKrw)}
+                  </p>
+                  <p className="text-[11px] text-gray-400">부름 {krw(v.deliveryFeeEstimateKrw)} 포함</p>
                 </div>
               </Link>
             ))}

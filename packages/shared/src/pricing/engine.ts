@@ -27,6 +27,7 @@ export const DELIVERY_FEE_PER_KM_KRW = 1500; // 부름(탁송) 요금 km당 (모
 export const DELIVERY_FEE_MIN_KRW = 6000;
 export const DELIVERY_MIN_LEAD_MINUTES = 60; // 부름 최소 리드타임
 export const DELIVERY_MAX_RADIUS_M = 5000; // 존 기준 부름 가능 반경
+export const DELIVERY_PREP_BUFFER_MINUTES = 20; // 탁송 준비 버퍼 (기사 배정·출발)
 const KST_OFFSET_MS = 9 * 3600 * 1000;
 const SLOTS_PER_HOUR = 6;
 

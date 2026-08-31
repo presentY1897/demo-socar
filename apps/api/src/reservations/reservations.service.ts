@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import {
   DELIVERY_MAX_RADIUS_M,
   DELIVERY_MIN_LEAD_MINUTES,
+  DELIVERY_PREP_BUFFER_MINUTES,
   deliveryFee,
   haversineMeters,
   onewayFee,
@@ -29,7 +30,7 @@ import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/t
 import type { JwtUser } from '../auth/jwt-auth.guard';
 
 /** 탁송 준비 버퍼 — 직전 반납 후 기사 배정·출발 준비 시간 */
-const DELIVERY_PREP_BUFFER_MS = 20 * 60 * 1000;
+const DELIVERY_PREP_BUFFER_MS = DELIVERY_PREP_BUFFER_MINUTES * 60 * 1000;
 
 /** PostgreSQL exclusion_violation (EXCLUDE USING GIST) 여부 */
 function isOverlapViolation(e: unknown): boolean {

@@ -146,6 +146,28 @@ describe('부름 (통합)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('검색 결과가 "바로 픽업"과 "부름으로 가져와 이용"으로 구분된다', async () => {
+    const start = nextSlot(90); // 리드타임 충족
+    const end = addMin(start, 60);
+    const q = `startAt=${encodeURIComponent(start.toISOString())}&endAt=${encodeURIComponent(end.toISOString())}`;
+
+    // 차량이 없는 옆 존(1.6km)을 검색 → 직접 픽업 0대, 부름 후보에 우리 차량
+    const res = await request(app.getHttpServer()).get(`/zones/${otherZoneId}?${q}`).expect(200);
+    expect(res.body.vehicles).toHaveLength(0);
+    const found = (res.body.deliverable as { id: string; fromZone: { name: string }; deliveryFeeEstimateKrw: number; deliveryEtaMinutes: number }[])
+      .find((v) => v.id === vehicleId);
+    expect(found).toBeDefined();
+    expect(found!.fromZone.name).toBe('bureum-zone');
+    expect(found!.deliveryFeeEstimateKrw).toBeGreaterThanOrEqual(6000);
+    expect(found!.deliveryEtaMinutes).toBeGreaterThan(0);
+
+    // 리드타임(60분) 미달 구간이면 부름 후보가 비어야 한다
+    const soon = nextSlot(20);
+    const q2 = `startAt=${encodeURIComponent(soon.toISOString())}&endAt=${encodeURIComponent(addMin(soon, 60).toISOString())}`;
+    const res2 = await request(app.getHttpServer()).get(`/zones/${otherZoneId}?${q2}`).expect(200);
+    expect(res2.body.deliverable).toHaveLength(0);
+  });
+
   it('직전 반납과의 간격이 탁송+준비 시간보다 짧으면 409', async () => {
     const start = nextSlot(120);
     // 직전 예약: 부름 시작 10분 전 반납 → 탁송(도로망 기준 수 분) + 준비 20분 부족
