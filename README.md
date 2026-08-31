@@ -116,15 +116,21 @@ pnpm --filter @socar/api test:int   # 통합 14케이스: 동시 예약 경합, 
 데모 범위에서 제외했다. 실제 상품과 이 데모의 관계는 [ADR-003](docs/adr/003-dispatch-scoring.md),
 [ADR-005](docs/adr/005-oneway-vehicle-location.md), [ADR-006](docs/adr/006-bureum-delivery.md)에 명시.
 
-## 도로망 그래프 재생성 (전국 지원)
+## 실데이터 파이프라인 (전국 지원)
+
+거점 좌표(`apps/api/scripts/regions.ts`)에 도시를 추가하면 두 파이프라인이 함께 커버합니다.
 
 ```bash
-pnpm --filter @socar/api build:graph          # 모든 지역
-pnpm --filter @socar/api build:graph -- seoul # 특정 지역
+pnpm --filter @socar/api build:graph   # 도로망: OSM 보행 도로 → A* 그래프 (data/graphs/*.json.gz)
+pnpm --filter @socar/api build:zones -- --std /path/to/전국주차장정보표준데이터.json
+                                       # 존: 실제 주차장 → data/zones.json (시드가 읽음)
 ```
 
-`apps/api/scripts/build-graph.ts`의 `REGIONS`에 중심 좌표를 추가하면 전국 어느 지역이든
-OSM에서 보행 도로망을 받아 경량 그래프(`data/graphs/*.json.gz`)로 만듭니다.
+존 데이터는 **[전국주차장정보표준데이터](https://www.data.go.kr/data/15012896/standard.do)**(공공데이터포털)를
+우선 사용하고, 커버리지가 부족한 지역은 OSM `amenity=parking`으로 보충합니다.
+현재 시드는 실제 주차장 30곳 (표준데이터 27 + OSM 3) — 이름·주소·면수가 실데이터입니다.
+
+> 데이터 출처: 전국주차장정보표준데이터(공공누리 제1유형) · © OpenStreetMap contributors (ODbL)
 
 ## 배포
 
@@ -141,6 +147,11 @@ Render 무료 티어는 유휴 15분 후 슬립되어 첫 요청이 30~60초 걸
 2. **외부 킵얼라이브 (선택)**: [UptimeRobot](https://uptimerobot.com) 무료 플랜으로
    `/health`를 5분 간격 모니터링하면 슬립 자체를 막을 수 있다 (Render 무료 750시간/월로
    단일 서비스 상시 가동 가능). GitHub Actions cron은 저장소가 public일 때만 무료라는 점 주의
+
+### 배포 DB 재시드
+
+시드 데이터가 바뀌면(존 교체 등) Render 환경변수 `AUTO_SEED`를 `force`로 바꿔 재배포 —
+부팅 시 전체 재시드된다. **끝나면 반드시 `true`로 되돌릴 것** (force 상태로 두면 부팅마다 초기화).
 
 ## 기술 스택
 

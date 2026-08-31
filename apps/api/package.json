@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "build:graph": "tsx scripts/build-graph.ts"
+    "build:graph": "tsx scripts/build-graph.ts",
+    "build:zones": "tsx scripts/build-zones.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

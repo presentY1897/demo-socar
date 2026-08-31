@@ -1,0 +1,272 @@
+[
+  {
+    "name": "자양4동 공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 광진구 자양동 5-5",
+    "lat": 37.53865,
+    "lng": 127.068173,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "화양동 공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 광진구 군자로 22",
+    "lat": 37.545298,
+    "lng": 127.071181,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "광진광장 공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 광진구 광나루로 389",
+    "lat": 37.547693,
+    "lng": 127.073216,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "압구정로29길 주차장",
+    "region": "seoul",
+    "address": "서울특별시 강남구 압구정로29길",
+    "lat": 37.530917,
+    "lng": 127.027169,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "옥수역 주차장",
+    "region": "seoul",
+    "address": "서울특별시 성동구 옥수동 401-1(옥수역7번출구 부근)",
+    "lat": 37.542192,
+    "lng": 127.017077,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "언주로171길 주차장",
+    "region": "seoul",
+    "address": "서울특별시 강남구 압구정로36길 17 주변",
+    "lat": 37.527767,
+    "lng": 127.032123,
+    "capacity": 28,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "성동구민종합체육센터 주차장",
+    "region": "seoul",
+    "address": "뚝섬역 인근",
+    "lat": 37.545455,
+    "lng": 127.04406,
+    "capacity": 10,
+    "source": "osm"
+  },
+  {
+    "name": "성수 주차세차장 주차장",
+    "region": "seoul",
+    "address": "뚝섬역 인근",
+    "lat": 37.543863,
+    "lng": 127.052268,
+    "capacity": 10,
+    "source": "osm"
+  },
+  {
+    "name": "신성주차장",
+    "region": "seoul",
+    "address": "뚝섬역 인근",
+    "lat": 37.544504,
+    "lng": 127.054668,
+    "capacity": 10,
+    "source": "osm"
+  },
+  {
+    "name": "황학어린이공원 공영주차장",
+    "region": "seoul",
+    "address": "서울특별시 중구 다산로48길 33",
+    "lat": 37.567482,
+    "lng": 127.018011,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "신설동 주차장",
+    "region": "seoul",
+    "address": "서울특별시 동대문구 신설동 114-29",
+    "lat": 37.572671,
+    "lng": 127.024192,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "청계8(남) 주차장",
+    "region": "seoul",
+    "address": "서울특별시 동대문구 신설동 109-2",
+    "lat": 37.571425,
+    "lng": 127.02515,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "반포천복개공영주차장",
+    "region": "seoul",
+    "address": "서울특별시 서초구 사평대로 205",
+    "lat": 37.504492,
+    "lng": 127.007845,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "양재역 주차장",
+    "region": "seoul",
+    "address": "서울특별시 서초구 양재동 23",
+    "lat": 37.483685,
+    "lng": 127.034118,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "역삼문화공원 제1호 공영주차장",
+    "region": "seoul",
+    "address": "서울특별시 강남구 테헤란로7길 21",
+    "lat": 37.50096,
+    "lng": 127.029677,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "연희맛로 공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 서대문구 연희맛로 23",
+    "lat": 37.567117,
+    "lng": 126.929661,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "연희동 제6공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 서대문구 홍연길16",
+    "lat": 37.574957,
+    "lng": 126.927991,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "연희동 제2공영 주차장",
+    "region": "seoul",
+    "address": "서울특별시 서대문구 연희동 105-8",
+    "lat": 37.572371,
+    "lng": 126.927677,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "범천동신암로 주차장",
+    "region": "busan",
+    "address": "부산광역시 부산진구 신암로 83",
+    "lat": 35.148679,
+    "lng": 129.053323,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "범일1동 제4공영 주차장",
+    "region": "busan",
+    "address": "부산광역시 동구 범내남로26번길 16",
+    "lat": 35.141654,
+    "lng": 129.050623,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "자유시장뒤 주차장",
+    "region": "busan",
+    "address": "부산광역시 동구 조방로 48",
+    "lat": 35.140975,
+    "lng": 129.061041,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "용두산 공영주차장",
+    "region": "busan",
+    "address": "부산광역시 중구 대청로 120",
+    "lat": 35.10232,
+    "lng": 129.032684,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "동구공영주차빌딩 주차장",
+    "region": "busan",
+    "address": "부산광역시 동구 중앙대로 196번길 12-12",
+    "lat": 35.113528,
+    "lng": 129.040199,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "망양공영 주차장",
+    "region": "busan",
+    "address": "부산광역시 서구 동대신동1가 11-15",
+    "lat": 35.1116,
+    "lng": 129.025119,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "중앙시장 공영주차빌딩 주차장(제2주차장)",
+    "region": "daejeon",
+    "address": "대전광역시 동구 중앙로 200번길 70",
+    "lat": 36.327418,
+    "lng": 127.432747,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "가제교~신안동 320 하상주차장",
+    "region": "daejeon",
+    "address": "대전광역시 동구 소제동299-453",
+    "lat": 36.334268,
+    "lng": 127.438926,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "문창동제3노상 주차장",
+    "region": "daejeon",
+    "address": "대전광역시 중구 대전천서로 269",
+    "lat": 36.314825,
+    "lng": 127.438736,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "공항입구 주차장",
+    "region": "jeju",
+    "address": "제주특별자치도 제주시 용담이동 1611-2",
+    "lat": 33.503675,
+    "lng": 126.495713,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "용두암 주차장",
+    "region": "jeju",
+    "address": "제주특별자치도 제주시 용담이동 483",
+    "lat": 33.514804,
+    "lng": 126.511798,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  },
+  {
+    "name": "성신로 주차장",
+    "region": "jeju",
+    "address": "제주특별자치도 제주시 연동 2322-7",
+    "lat": 33.49108,
+    "lng": 126.486022,
+    "capacity": 30,
+    "source": "kr-standard-data"
+  }
+]

@@ -6,6 +6,48 @@
  */
 import { PrismaClient, Role, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+interface ZoneDef {
+  name: string;
+  region: string;
+  address: string;
+  lat: number;
+  lng: number;
+  capacity: number;
+}
+
+/**
+ * 존 정의: build:zones가 만든 실데이터(data/zones.json)가 있으면 그것을,
+ * 없으면 내장 기본값을 쓴다. (실데이터 = 전국주차장정보표준데이터 + OSM)
+ */
+function loadZoneDefs(): ZoneDef[] {
+  const file = path.resolve(process.cwd(), 'data/zones.json');
+  if (fs.existsSync(file)) {
+    const zones = JSON.parse(fs.readFileSync(file, 'utf8')) as ZoneDef[];
+    console.log(`실데이터 존 로드: ${zones.length}곳 (data/zones.json)`);
+    return zones.map((z) => ({
+      name: z.name, region: z.region, address: z.address,
+      lat: z.lat, lng: z.lng, capacity: z.capacity,
+    }));
+  }
+  console.log('data/zones.json 없음 — 내장 기본 존 사용');
+  return FALLBACK_ZONES;
+}
+
+const FALLBACK_ZONES: ZoneDef[] = [
+  { name: '성수역 2번 출구', region: 'seoul', address: '서울 성동구 성수동2가', lat: 37.544579, lng: 127.055961, capacity: 6 },
+  { name: '서울숲 공영주차장', region: 'seoul', address: '서울 성동구 성수동1가', lat: 37.544061, lng: 127.037627, capacity: 5 },
+  { name: '뚝섬역 공영주차장', region: 'seoul', address: '서울 성동구 성수동1가', lat: 37.547189, lng: 127.047478, capacity: 4 },
+  { name: '왕십리역 광장', region: 'seoul', address: '서울 성동구 행당동', lat: 37.561257, lng: 127.037756, capacity: 5 },
+  { name: '강남역 12번 출구', region: 'seoul', address: '서울 강남구 역삼동', lat: 37.497175, lng: 127.02758, capacity: 6 },
+  { name: '홍대입구역 주차장', region: 'seoul', address: '서울 마포구 동교동', lat: 37.557527, lng: 126.9244669, capacity: 4 },
+  { name: '서면역 지하주차장', region: 'busan', address: '부산 부산진구 부전동', lat: 35.157845, lng: 129.059334, capacity: 5 },
+  { name: '부산역 광장', region: 'busan', address: '부산 동구 초량동', lat: 35.115225, lng: 129.041538, capacity: 4 },
+  { name: '대전역 동광장', region: 'daejeon', address: '대전 동구 정동', lat: 36.331785, lng: 127.434257, capacity: 3 },
+  { name: '제주공항 주차장', region: 'jeju', address: '제주 제주시 용담이동', lat: 33.507024, lng: 126.492769, capacity: 6 },
+];
 
 /** 결정적 난수 (시드 고정) */
 function mulberry32(seed: number) {
@@ -68,19 +110,8 @@ export async function runSeed(prisma: PrismaClient) {
     }),
   ]);
 
-  // ── 존 (전국) — region은 도로망 그래프 키 ──
-  const zoneDefs = [
-    { name: '성수역 2번 출구', region: 'seoul', address: '서울 성동구 성수동2가', lat: 37.544579, lng: 127.055961, capacity: 6 },
-    { name: '서울숲 공영주차장', region: 'seoul', address: '서울 성동구 성수동1가', lat: 37.544061, lng: 127.037627, capacity: 5 },
-    { name: '뚝섬역 공영주차장', region: 'seoul', address: '서울 성동구 성수동1가', lat: 37.547189, lng: 127.047478, capacity: 4 },
-    { name: '왕십리역 광장', region: 'seoul', address: '서울 성동구 행당동', lat: 37.561257, lng: 127.037756, capacity: 5 },
-    { name: '강남역 12번 출구', region: 'seoul', address: '서울 강남구 역삼동', lat: 37.497175, lng: 127.02758, capacity: 6 },
-    { name: '홍대입구역 주차장', region: 'seoul', address: '서울 마포구 동교동', lat: 37.557527, lng: 126.9244669, capacity: 4 },
-    { name: '서면역 지하주차장', region: 'busan', address: '부산 부산진구 부전동', lat: 35.157845, lng: 129.059334, capacity: 5 },
-    { name: '부산역 광장', region: 'busan', address: '부산 동구 초량동', lat: 35.115225, lng: 129.041538, capacity: 4 },
-    { name: '대전역 동광장', region: 'daejeon', address: '대전 동구 정동', lat: 36.331785, lng: 127.434257, capacity: 3 },
-    { name: '제주공항 주차장', region: 'jeju', address: '제주 제주시 용담이동', lat: 33.507024, lng: 126.492769, capacity: 6 },
-  ];
+  // ── 존 (전국) — 실데이터(data/zones.json) 우선, region은 도로망 그래프 키 ──
+  const zoneDefs = loadZoneDefs();
 
   const zones = [] as { id: string; name: string }[];
   for (const z of zoneDefs) {
@@ -224,7 +255,8 @@ export async function runSeed(prisma: PrismaClient) {
   const demoUsers = [user, corpMember];
   let histCount = 0;
   for (let day = 30; day >= 1; day--) {
-    const ridesToday = 1 + Math.floor(rand() * 4);
+    // 차량 규모에 비례한 일별 이용량
+    const ridesToday = 1 + Math.floor(rand() * Math.max(4, vehicles.length / 5));
     for (let r = 0; r < ridesToday; r++) {
       const vehicle = pick(vehicles);
       const startHour = 8 + Math.floor(rand() * 10);

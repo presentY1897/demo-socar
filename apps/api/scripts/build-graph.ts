@@ -15,29 +15,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
+import { REGIONS } from './regions';
 
 const OVERPASS_URL = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter';
 /** 중심 좌표 기준 상자 반경(도 단위, 위도 0.02° ≈ 2.2km) */
 const BOX_HALF_DEG = 0.02;
-
-/** 시드(prisma/seed.ts)의 존/오피스 좌표와 동기화 유지 */
-const REGIONS: Record<string, [number, number][]> = {
-  seoul: [
-    [37.544579, 127.055961], // 성수역
-    [37.544061, 127.037627], // 서울숲
-    [37.547189, 127.047478], // 뚝섬역
-    [37.561257, 127.037756], // 왕십리역
-    [37.542312, 127.054883], // 데모컴퍼니 오피스
-    [37.497175, 127.02758], // 강남역
-    [37.557527, 126.9244669], // 홍대입구역
-  ],
-  busan: [
-    [35.157845, 129.059334], // 서면역
-    [35.115225, 129.041538], // 부산역
-  ],
-  daejeon: [[36.331785, 127.434257]], // 대전역
-  jeju: [[33.507024, 126.492769]], // 제주공항
-};
 
 const WALKABLE_HIGHWAY =
   '^(primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|pedestrian|footway|path|steps|service)$';
@@ -111,12 +93,12 @@ function largestComponent(nodeCount: number, edges: [number, number, number][]) 
   return { keep: (i: number) => find(i) === bestRoot, size: bestSize };
 }
 
-async function buildRegion(region: string, centers: [number, number][]) {
+async function buildRegion(region: string, centers: { lat: number; lng: number }[]) {
   console.log(`\n[${region}] ${centers.length}개 영역 조회 중...`);
   const nodeById = new Map<number, OsmNode>();
   const wayById = new Map<number, OsmWay>();
 
-  for (const [lat, lng] of centers) {
+  for (const { lat, lng } of centers) {
     // 경도는 위도에 따라 실거리가 줄어들므로 cos 보정으로 정사각형에 가깝게
     const lngHalf = BOX_HALF_DEG / Math.cos((lat * Math.PI) / 180);
     const data = await fetchBox(lat - BOX_HALF_DEG, lng - lngHalf, lat + BOX_HALF_DEG, lng + lngHalf);
