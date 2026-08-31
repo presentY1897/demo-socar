@@ -6,8 +6,7 @@
 모빌리티 도메인의 핵심 문제 — **실시간 예약 동시성, 결제 멱등성, 대여 라이프사이클, 운영 의사결정** — 를
 End-to-End(기획 → 설계 → 구현 → 테스트 → 배포)로 구현했습니다.
 
-<!-- TODO: 배포 후 링크/스크린샷 교체 -->
-**데모**: 웹 https://mocar.vercel.app · API https://mocar-api.onrender.com/health
+**데모**: 웹 https://socar-demo.vercel.app · API https://mocar-api-d07z.onrender.com/health
 (Render 무료 티어는 유휴 시 슬립 상태가 되어 첫 요청에 30초쯤 걸릴 수 있어요)
 
 ## 공고 요구사항 ↔ 구현 매핑
