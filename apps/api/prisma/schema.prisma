@@ -118,8 +118,8 @@ model Reservation {
   id        String            @id @default(cuid())
   userId    String
   vehicleId String
-  startAt   DateTime
-  endAt     DateTime
+  startAt   DateTime          @db.Timestamptz(3)
+  endAt     DateTime          @db.Timestamptz(3)
   status    ReservationStatus @default(CONFIRMED)
   insurance InsuranceTier
 
