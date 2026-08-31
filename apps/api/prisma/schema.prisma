@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── 사용자 / 법인 ───────────────────────────
+
+enum Role {
+  USER // 개인 이용자
+  CORP_MEMBER // 법인 임직원
+  CORP_ADMIN // 법인 배차 담당자
+  OPS_ADMIN // 쏘카 운영 어드민
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  role          Role     @default(USER)
+  corporationId String?
+  createdAt     DateTime @default(now())
+
+  corporation      Corporation?      @relation(fields: [corporationId], references: [id])
+  reservations     Reservation[]
+  coupons          Coupon[]
+  creditLedger     CreditLedger[]
+  dispatchRequests DispatchRequest[] @relation("requester")
+  dispatchDecided  DispatchRequest[] @relation("decider")
+}
+
+model Corporation {
+  id            String @id @default(cuid())
+  name          String
+  officeAddress String
+  officeLat     Float
+  officeLng     Float
+
+  members          User[]
+  dispatchRequests DispatchRequest[]
+}
+
+// ─────────────────────────── 존 / 차량 / 요금제 ───────────────────────────
+
+model Zone {
+  id       String @id @default(cuid())
+  name     String
+  region   String // 도로망 그래프 파일 키 (예: "seoul", "busan")
+  address  String
+  lat      Float
+  lng      Float
+  capacity Int
+
+  vehicles Vehicle[]
+}
+
+model PricingPlan {
+  id                   String @id @default(cuid())
+  name                 String // 예: "경형", "준중형 EV"
+  baseHourlyKrw        Int // 주중 시간당 대여요금
+  weekendHourlyKrw     Int // 주말 시간당 대여요금
+  perKmKrw             Int // km당 주행요금 (반납 후 정산)
+  insuranceLightKrw    Int // 시간당 차량손해면책 보험료
+  insuranceStandardKrw Int
+  insuranceFullKrw     Int
+
+  vehicles Vehicle[]
+}
+
+enum FuelType {
+  EV
+  GASOLINE
+  HYBRID
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  MAINTENANCE // 정비 중 — 예약 불가
+}
+
+model Vehicle {
+  id        String        @id @default(cuid())
+  modelName String
+  plateNo   String        @unique
+  fuel      FuelType
+  seats     Int
+  status    VehicleStatus @default(AVAILABLE)
+  imageUrl  String?
+  zoneId    String
+  planId    String
+
+  zone               Zone                @relation(fields: [zoneId], references: [id])
+  plan               PricingPlan         @relation(fields: [planId], references: [id])
+  reservations       Reservation[]
+  dispatchCandidates DispatchCandidate[]
+}
+
+// ─────────────────────────── 예약 / 대여 ───────────────────────────
+
+enum ReservationStatus {
+  CONFIRMED // 결제 완료, 이용 전
+  IN_USE // 대여 중
+  COMPLETED // 반납 + 정산 완료
+  CANCELED
+}
+
+enum InsuranceTier {
+  LIGHT
+  STANDARD
+  FULL
+}
+
+model Reservation {
+  id        String            @id @default(cuid())
+  userId    String
+  vehicleId String
+  startAt   DateTime
+  endAt     DateTime
+  status    ReservationStatus @default(CONFIRMED)
+  insurance InsuranceTier
+
+  // 결제 시점 요금 스냅샷
+  rentalFeeKrw    Int
+  insuranceFeeKrw Int
+  discountKrw     Int     @default(0)
+  creditUsedKrw   Int     @default(0)
+  totalUpfrontKrw Int
+  couponId        String? @unique
+
+  createdAt  DateTime  @default(now())
+  canceledAt DateTime?
+
+  user     User        @relation(fields: [userId], references: [id])
+  vehicle  Vehicle     @relation(fields: [vehicleId], references: [id])
+  coupon   Coupon?     @relation(fields: [couponId], references: [id])
+  payments Payment[]
+  rental   Rental?
+  dispatch DispatchRequest?
+
+  // 시간 겹침 방지는 마이그레이션의 EXCLUDE USING GIST 제약이 최종 방어선
+  @@index([vehicleId, startAt])
+  @@index([userId, startAt])
+}
+
+enum RentalStatus {
+  IN_USE
+  RETURN_PENDING // 반납 접수, 주행요금 정산 대기
+  COMPLETED
+}
+
+model Rental {
+  id            String       @id @default(cuid())
+  reservationId String       @unique
+  status        RentalStatus @default(IN_USE)
+  startedAt     DateTime     @default(now()) // 첫 문열기(스마트키)
+  returnedAt    DateTime?
+  distanceKm    Float?
+  lateMinutes   Int          @default(0)
+  driveFeeKrw   Int?
+  lateFeeKrw    Int?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+}
+
+// ─────────────────────────── 결제 / 할인 ───────────────────────────
+
+enum PaymentKind {
+  UPFRONT // 대여요금 선결제
+  DRIVE_SETTLEMENT // 반납 후 주행요금 정산
+  PENALTY // 지연 반납 페널티
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  reservationId  String
+  kind           PaymentKind
+  amountKrw      Int
+  status         PaymentStatus @default(PENDING)
+  idempotencyKey String        @unique
+  cardLast4      String?
+  approvedAt     DateTime?
+  failReason     String?
+  createdAt      DateTime      @default(now())
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+}
+
+model Coupon {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  discountKrw Int
+  expiresAt   DateTime
+  usedAt      DateTime?
+
+  user        User         @relation(fields: [userId], references: [id])
+  reservation Reservation?
+}
+
+enum CreditReason {
+  SIGNUP_BONUS
+  USE
+  REFUND
+  ADMIN
+}
+
+model CreditLedger {
+  id            String       @id @default(cuid())
+  userId        String
+  deltaKrw      Int // 양수 = 적립, 음수 = 사용
+  reason        CreditReason
+  memo          String?
+  reservationId String?
+  createdAt     DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// ─────────────────────────── 법인 배차 (오피스) ───────────────────────────
+
+enum DispatchStatus {
+  REQUESTED // 임직원 요청 접수
+  RECOMMENDED // 후보 추천 완료, 담당자 결정 대기
+  APPROVED // 담당자 승인 → 예약 생성됨
+  REJECTED
+  CANCELED
+}
+
+model DispatchRequest {
+  id            String         @id @default(cuid())
+  corporationId String
+  requesterId   String
+  purpose       String // 예: "거래처 미팅 (판교)"
+  originLabel   String // 출발지 표기 (보통 오피스)
+  originLat     Float
+  originLng     Float
+  desiredStartAt DateTime
+  desiredEndAt   DateTime
+  status        DispatchStatus @default(REQUESTED)
+
+  reservationId String?   @unique // 승인 시 생성된 예약
+  decidedById   String?
+  decidedAt     DateTime?
+  rejectReason  String?
+  createdAt     DateTime  @default(now())
+
+  corporation Corporation         @relation(fields: [corporationId], references: [id])
+  requester   User                @relation("requester", fields: [requesterId], references: [id])
+  decidedBy   User?               @relation("decider", fields: [decidedById], references: [id])
+  reservation Reservation?        @relation(fields: [reservationId], references: [id])
+  candidates  DispatchCandidate[]
+}
+
+model DispatchCandidate {
+  id            String   @id @default(cuid())
+  requestId     String
+  vehicleId     String
+  rank          Int
+  score         Float
+  walkSeconds   Int // 요청자 → 차량 존까지 이동 시간 (길찾기 추정)
+  walkMeters    Int
+  bufferMinutes Int // 직전 예약 반납 예정 시각과의 여유
+  lateRiskPct   Float // 직전 이용 차량의 지연 반납 리스크
+  reasons       Json // 추천 근거 문장 배열
+  createdAt     DateTime @default(now())
+
+  request DispatchRequest @relation(fields: [requestId], references: [id])
+  vehicle Vehicle         @relation(fields: [vehicleId], references: [id])
+
+  @@unique([requestId, vehicleId])
+}
