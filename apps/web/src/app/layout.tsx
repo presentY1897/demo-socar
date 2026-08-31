@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AppShell } from '@/components/AppShell';
+import { RegisterSW } from '@/components/RegisterSW';
 import { SessionProvider } from '@/lib/session';
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SessionProvider>
           <AppShell>{children}</AppShell>
         </SessionProvider>
+        <RegisterSW />
       </body>
     </html>
   );
