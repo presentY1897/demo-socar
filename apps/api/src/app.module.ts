@@ -1,12 +1,28 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { DispatchModule } from './dispatch/dispatch.module';
 import { HealthController } from './health.controller';
+import { MetricsModule } from './metrics/metrics.module';
+import { PaymentsModule } from './payments/payments.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { RentalsModule } from './rentals/rentals.module';
+import { ReservationsModule } from './reservations/reservations.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
+import { ZonesModule } from './zones/zones.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '../../.env'] }),
     PrismaModule,
+    AuthModule,
+    ZonesModule,
+    VehiclesModule,
+    ReservationsModule,
+    RentalsModule,
+    PaymentsModule,
+    DispatchModule,
+    MetricsModule,
   ],
   controllers: [HealthController],
 })
