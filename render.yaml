@@ -1,0 +1,26 @@
+# Render Blueprint — API 배포 (DB는 Neon 사용, 웹은 Vercel)
+# 대시보드에서 New → Blueprint 로 이 저장소를 연결하면 아래 서비스가 생성된다.
+services:
+  - type: web
+    name: mocar-api
+    runtime: node
+    plan: free
+    buildCommand: >-
+      corepack enable && corepack prepare pnpm@9.15.9 --activate &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @socar/shared build &&
+      pnpm --filter @socar/api exec prisma generate &&
+      pnpm --filter @socar/api build
+    startCommand: cd apps/api && npx prisma migrate deploy && node dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false # Neon 연결 문자열을 대시보드에서 입력
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        sync: false # Vercel 배포 URL (예: https://mocar.vercel.app)
+      - key: AUTO_SEED
+        value: "true" # 빈 DB일 때 부팅 시 1회 데모 시드

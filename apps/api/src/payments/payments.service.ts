@@ -23,6 +23,9 @@ export class PaymentsService {
       where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing) {
+      if (existing.reservationId !== input.reservationId) {
+        throw new BadRequestException('이미 다른 결제에 사용된 멱등성 키입니다');
+      }
       if (existing.status === 'CAPTURED') return existing;
       throw new BadRequestException('이미 처리 중이거나 실패한 결제입니다. 새로 시도해 주세요');
     }
