@@ -24,6 +24,14 @@ export const INSURANCE_META = {
   },
 } as const;
 
+/** 부름(탁송) 수령: 지정 위치로 차량 배달, 이용 후 같은 자리에서 회수 */
+export const deliverySchema = z.object({
+  lat: z.number().min(33).max(39),
+  lng: z.number().min(124).max(132),
+  label: z.string().min(1).max(60),
+});
+export type DeliveryDto = z.infer<typeof deliverySchema>;
+
 export const createReservationSchema = z
   .object({
     vehicleId: z.string().min(1),
@@ -32,6 +40,8 @@ export const createReservationSchema = z
     insurance: insuranceTierSchema,
     /** 편도 예약: 다른 존에 반납 (미지정 = 왕복) */
     returnZoneId: z.string().optional(),
+    /** 부름 수령 (편도와 동시 사용 불가) */
+    delivery: deliverySchema.optional(),
     couponId: z.string().optional(),
     useCredit: z.boolean().default(false),
     /** 모의 PG: '0000'으로 끝나는 카드는 승인 거절 */
@@ -44,18 +54,26 @@ export const createReservationSchema = z
   })
   .refine((v) => new Date(v.startAt) < new Date(v.endAt), {
     message: '반납 시각은 시작 시각 이후여야 합니다',
+  })
+  .refine((v) => !(v.returnZoneId && v.delivery), {
+    message: '부름과 편도는 함께 쓸 수 없어요',
   });
 export type CreateReservationDto = z.infer<typeof createReservationSchema>;
 
-export const quoteRequestSchema = z.object({
-  vehicleId: z.string().min(1),
-  startAt: z.string().datetime({ offset: true }),
-  endAt: z.string().datetime({ offset: true }),
-  insurance: insuranceTierSchema,
-  returnZoneId: z.string().optional(),
-  couponId: z.string().optional(),
-  useCredit: z.boolean().default(false),
-});
+export const quoteRequestSchema = z
+  .object({
+    vehicleId: z.string().min(1),
+    startAt: z.string().datetime({ offset: true }),
+    endAt: z.string().datetime({ offset: true }),
+    insurance: insuranceTierSchema,
+    returnZoneId: z.string().optional(),
+    delivery: deliverySchema.optional(),
+    couponId: z.string().optional(),
+    useCredit: z.boolean().default(false),
+  })
+  .refine((v) => !(v.returnZoneId && v.delivery), {
+    message: '부름과 편도는 함께 쓸 수 없어요',
+  });
 export type QuoteRequestDto = z.infer<typeof quoteRequestSchema>;
 
 /** 이용 전 예약 시간 변경 */

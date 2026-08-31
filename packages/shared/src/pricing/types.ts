@@ -17,6 +17,8 @@ export interface QuoteInput {
   insurance: InsuranceTier;
   /** 편도 수수료 (편도 예약 시, onewayFee()로 계산) */
   onewayFeeKrw?: number;
+  /** 부름 요금 (부름 수령 시, deliveryFee()로 계산) */
+  deliveryFeeKrw?: number;
   couponDiscountKrw?: number;
   /** 사용 가능한 크레딧 잔액 (useCredit=true일 때 총액 한도 내에서 차감) */
   creditBalanceKrw?: number;
@@ -28,6 +30,7 @@ export interface QuoteBreakdown {
   rentalFeeKrw: number;
   insuranceFeeKrw: number;
   onewayFeeKrw: number;
+  deliveryFeeKrw: number;
   discountKrw: number; // 쿠폰 할인
   creditUsedKrw: number;
   totalUpfrontKrw: number; // 선결제 금액

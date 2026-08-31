@@ -23,6 +23,10 @@ export const FREE_DRIVE_KM = 30; // 주행요금 면제 구간 (내연/하이브
 export const LATE_FEE_PER_MIN_KRW = 200;
 export const ONEWAY_FEE_PER_KM_KRW = 500; // 편도 수수료 km당 (모의 단가)
 export const ONEWAY_FEE_MIN_KRW = 5000;
+export const DELIVERY_FEE_PER_KM_KRW = 1500; // 부름(탁송) 요금 km당 (모의 단가)
+export const DELIVERY_FEE_MIN_KRW = 6000;
+export const DELIVERY_MIN_LEAD_MINUTES = 60; // 부름 최소 리드타임
+export const DELIVERY_MAX_RADIUS_M = 5000; // 존 기준 부름 가능 반경
 const KST_OFFSET_MS = 9 * 3600 * 1000;
 const SLOTS_PER_HOUR = 6;
 
@@ -72,8 +76,9 @@ export function quote(input: QuoteInput): QuoteBreakdown {
 
   const insuranceFee = Math.round((insuranceHourly(plan, insurance) * slotCount) / SLOTS_PER_HOUR);
   const onewayFeeKrw = Math.max(0, Math.round(input.onewayFeeKrw ?? 0));
+  const deliveryFeeKrw = Math.max(0, Math.round(input.deliveryFeeKrw ?? 0));
 
-  const grossTotal = rentalFee + insuranceFee + onewayFeeKrw;
+  const grossTotal = rentalFee + insuranceFee + onewayFeeKrw + deliveryFeeKrw;
   const discount = Math.min(input.couponDiscountKrw ?? 0, grossTotal);
   const afterCoupon = grossTotal - discount;
   const creditUsed = input.useCredit
@@ -85,6 +90,7 @@ export function quote(input: QuoteInput): QuoteBreakdown {
     rentalFeeKrw: rentalFee,
     insuranceFeeKrw: insuranceFee,
     onewayFeeKrw,
+    deliveryFeeKrw,
     discountKrw: discount,
     creditUsedKrw: creditUsed,
     totalUpfrontKrw: grossTotal - discount - creditUsed,
@@ -95,6 +101,12 @@ export function quote(input: QuoteInput): QuoteBreakdown {
 export function onewayFee(distanceMeters: number): number {
   const raw = (distanceMeters / 1000) * ONEWAY_FEE_PER_KM_KRW;
   return Math.max(ONEWAY_FEE_MIN_KRW, Math.round(raw / 100) * 100);
+}
+
+/** 부름(탁송) 요금: 존→배달지 경로 거리 기반 (100원 단위 반올림, 최소 6,000원) */
+export function deliveryFee(distanceMeters: number): number {
+  const raw = (distanceMeters / 1000) * DELIVERY_FEE_PER_KM_KRW;
+  return Math.max(DELIVERY_FEE_MIN_KRW, Math.round(raw / 100) * 100);
 }
 
 /** 반납 후 정산: 주행요금(30km 면제, EV 무료) + 지연 반납 페널티 */

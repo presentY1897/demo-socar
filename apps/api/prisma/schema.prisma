@@ -131,10 +131,16 @@ model Reservation {
   insurance InsuranceTier
   returnZoneId String? // 편도 예약: 반납 존 (null = 왕복)
 
+  // 부름(탁송) 수령: 지정 위치로 배달, 이용 후 같은 자리 회수 (편도와 배타)
+  deliveryLat   Float?
+  deliveryLng   Float?
+  deliveryLabel String?
+
   // 결제 시점 요금 스냅샷
   rentalFeeKrw    Int
   insuranceFeeKrw Int
   onewayFeeKrw    Int     @default(0)
+  deliveryFeeKrw  Int     @default(0)
   discountKrw     Int     @default(0)
   creditUsedKrw   Int     @default(0)
   totalUpfrontKrw Int

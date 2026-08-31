@@ -18,6 +18,8 @@ interface Detail {
   rentalFeeKrw: number;
   insuranceFeeKrw: number;
   onewayFeeKrw: number;
+  deliveryFeeKrw: number;
+  deliveryLabel: string | null;
   discountKrw: number;
   creditUsedKrw: number;
   totalUpfrontKrw: number;
@@ -115,11 +117,17 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
           {fmtDateTime(data.startAt)} ~ {fmtDateTime(data.endAt)}
         </p>
         <p className="mt-1 text-xs text-gray-400">
-          {data.vehicle.zone.name}
-          {data.returnZone ? (
-            <span className="text-indigo-500"> → {data.returnZone.name} (편도)</span>
+          {data.deliveryLabel ? (
+            <span className="text-indigo-500">🚚 부름 수령: {data.deliveryLabel} (같은 자리 회수)</span>
           ) : (
-            ' (왕복)'
+            <>
+              {data.vehicle.zone.name}
+              {data.returnZone ? (
+                <span className="text-indigo-500"> → {data.returnZone.name} (편도)</span>
+              ) : (
+                ' (왕복)'
+              )}
+            </>
           )}
           {' · '}
           {INSURANCE_META[data.insurance].label}
@@ -223,15 +231,17 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
           )}
           {beforeStart && (
             <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setModifyRange({ startAt: data.startAt, endAt: data.endAt });
-                  setShowModify((v) => !v);
-                }}
-                className="flex-1 rounded-xl border border-sky-300 bg-white py-3 font-semibold text-sky-600"
-              >
-                시간 변경
-              </button>
+              {!data.deliveryLabel && (
+                <button
+                  onClick={() => {
+                    setModifyRange({ startAt: data.startAt, endAt: data.endAt });
+                    setShowModify((v) => !v);
+                  }}
+                  className="flex-1 rounded-xl border border-sky-300 bg-white py-3 font-semibold text-sky-600"
+                >
+                  시간 변경
+                </button>
+              )}
               <button
                 disabled={busy}
                 onClick={() => act(() => api(`/reservations/${data.id}/cancel`, { method: 'POST' }))}
@@ -282,6 +292,7 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
           <Row label="대여요금" value={krw(data.rentalFeeKrw)} />
           <Row label={`면책상품 (${INSURANCE_META[data.insurance].label})`} value={krw(data.insuranceFeeKrw)} />
           {data.onewayFeeKrw > 0 && <Row label="편도 수수료" value={krw(data.onewayFeeKrw)} />}
+          {data.deliveryFeeKrw > 0 && <Row label="부름 요금" value={krw(data.deliveryFeeKrw)} />}
           {data.discountKrw > 0 && <Row label="쿠폰 할인" value={`-${krw(data.discountKrw)}`} />}
           {data.creditUsedKrw > 0 && <Row label="크레딧" value={`-${krw(data.creditUsedKrw)}`} />}
           <Row label="선결제 합계" value={krw(data.totalUpfrontKrw)} bold />

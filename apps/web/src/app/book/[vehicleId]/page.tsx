@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, use, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
@@ -10,13 +11,18 @@ import { useSession } from '@/lib/session';
 import { fmtDateTime, INSURANCE_META, krw } from '@/lib/format';
 import { defaultRange, durationLabel } from '@/lib/timerange';
 
+const DeliveryMapPicker = dynamic(() => import('@/components/DeliveryMapPicker'), {
+  ssr: false,
+  loading: () => <div className="flex h-48 items-center justify-center rounded-lg bg-gray-50 text-xs text-gray-400">지도 로딩...</div>,
+});
+
 interface VehicleDetail {
   id: string;
   modelName: string;
   plateNo: string;
   seats: number;
   fuel: string;
-  zone: { id: string; name: string; address: string; region: string };
+  zone: { id: string; name: string; address: string; region: string; lat: number; lng: number };
   plan: {
     name: string;
     baseHourlyKrw: number;
@@ -48,6 +54,9 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
 
   const [insurance, setInsurance] = useState<'LIGHT' | 'STANDARD' | 'FULL'>('STANDARD');
   const [returnZoneId, setReturnZoneId] = useState('');
+  const [pickup, setPickup] = useState<'zone' | 'delivery'>('zone');
+  const [deliveryPos, setDeliveryPos] = useState<[number, number] | null>(null);
+  const [deliveryLabel, setDeliveryLabel] = useState('');
   const [couponId, setCouponId] = useState('');
   const [useCredit, setUseCredit] = useState(false);
   const [cardLast4, setCardLast4] = useState('4242');
@@ -64,9 +73,16 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
   const { data: coupons } = useSWR<Coupon[]>(user ? '/me/coupons' : null, swrFetcher);
   const { data: credit } = useSWR<{ balanceKrw: number }>(user ? '/me/credit' : null, swrFetcher);
 
+  const delivery =
+    pickup === 'delivery' && deliveryPos && deliveryLabel.trim()
+      ? { lat: deliveryPos[0], lng: deliveryPos[1], label: deliveryLabel.trim() }
+      : undefined;
+  const deliveryIncomplete = pickup === 'delivery' && !delivery;
+
   useEffect(() => {
     setQuote(null);
-    if (!user) return;
+    setError(null);
+    if (!user || deliveryIncomplete) return;
     let stale = false;
     api<QuoteBreakdown>('/reservations/quote', {
       method: 'POST',
@@ -76,6 +92,7 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
         endAt,
         insurance,
         returnZoneId: returnZoneId || undefined,
+        delivery,
         couponId: couponId || undefined,
         useCredit,
       },
@@ -85,7 +102,8 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
     return () => {
       stale = true;
     };
-  }, [user, vehicleId, startAt, endAt, insurance, returnZoneId, couponId, useCredit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, vehicleId, startAt, endAt, insurance, returnZoneId, couponId, useCredit, pickup, deliveryPos, deliveryLabel]);
 
   async function submit() {
     setSubmitting(true);
@@ -99,6 +117,7 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
           endAt,
           insurance,
           returnZoneId: returnZoneId || undefined,
+          delivery,
           couponId: couponId || undefined,
           useCredit,
           cardLast4,
@@ -160,25 +179,79 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
         </p>
       </div>
 
-      {/* 반납 존 (편도) */}
+      {/* 수령 방법: 존 픽업 / 부름 */}
       <div className="mt-3 rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">반납 장소</h2>
-        <select
-          value={returnZoneId}
-          onChange={(e) => setReturnZoneId(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="">빌린 곳에 반납 (왕복)</option>
-          {(returnZones ?? []).map((z) => (
-            <option key={z.id} value={z.id}>
-              {z.name} — 편도
-            </option>
-          ))}
-        </select>
-        {returnZoneId && quote && (
-          <p className="mt-1.5 text-xs text-gray-400">편도 수수료 {krw(quote.onewayFeeKrw)}가 포함돼요</p>
+        <h2 className="font-semibold">수령 방법</h2>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setPickup('zone')}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              pickup === 'zone' ? 'border-sky-500 bg-sky-50 font-semibold text-sky-600' : 'border-gray-200 text-gray-500'
+            }`}
+          >
+            존에서 픽업
+          </button>
+          <button
+            onClick={() => {
+              setPickup('delivery');
+              setReturnZoneId(''); // 부름과 편도는 함께 쓸 수 없다
+              if (!deliveryPos && vehicle) setDeliveryPos([vehicle.zone.lat + 0.002, vehicle.zone.lng + 0.002]);
+            }}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              pickup === 'delivery' ? 'border-sky-500 bg-sky-50 font-semibold text-sky-600' : 'border-gray-200 text-gray-500'
+            }`}
+          >
+            부름으로 받기 🚚
+          </button>
+        </div>
+
+        {pickup === 'delivery' && vehicle && (
+          <div className="mt-3">
+            <p className="text-xs text-gray-500">지도를 탭해서 받을 위치를 지정하세요 (존 반경 5km)</p>
+            <div className="mt-2">
+              <DeliveryMapPicker
+                center={[vehicle.zone.lat, vehicle.zone.lng]}
+                position={deliveryPos}
+                onPick={(lat, lng) => setDeliveryPos([lat, lng])}
+              />
+            </div>
+            <input
+              value={deliveryLabel}
+              onChange={(e) => setDeliveryLabel(e.target.value)}
+              placeholder="장소 이름 (예: 회사 정문 앞)"
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <p className="mt-1.5 text-[11px] text-gray-400">
+              탁송 시간이 필요해 최소 1시간 이후 시각부터 예약할 수 있어요 · 이용 후 같은 자리에서 회수해요
+            </p>
+            {quote && quote.deliveryFeeKrw > 0 && (
+              <p className="mt-1 text-xs text-gray-500">부름 요금 {krw(quote.deliveryFeeKrw)}가 포함돼요</p>
+            )}
+          </div>
         )}
       </div>
+
+      {/* 반납 존 (편도) — 부름과 배타 */}
+      {pickup === 'zone' && (
+        <div className="mt-3 rounded-xl bg-white p-4 shadow-sm">
+          <h2 className="font-semibold">반납 장소</h2>
+          <select
+            value={returnZoneId}
+            onChange={(e) => setReturnZoneId(e.target.value)}
+            className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="">빌린 곳에 반납 (왕복)</option>
+            {(returnZones ?? []).map((z) => (
+              <option key={z.id} value={z.id}>
+                {z.name} — 편도
+              </option>
+            ))}
+          </select>
+          {returnZoneId && quote && (
+            <p className="mt-1.5 text-xs text-gray-400">편도 수수료 {krw(quote.onewayFeeKrw)}가 포함돼요</p>
+          )}
+        </div>
+      )}
 
       {/* 면책상품 */}
       <div className="mt-3 rounded-xl bg-white p-4 shadow-sm">
@@ -245,6 +318,7 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
             <Row label={`대여요금 (${durationLabel(startAt, endAt)})`} value={krw(quote.rentalFeeKrw)} />
             <Row label={`면책상품 (${INSURANCE_META[insurance].label})`} value={krw(quote.insuranceFeeKrw)} />
             {quote.onewayFeeKrw > 0 && <Row label="편도 수수료" value={krw(quote.onewayFeeKrw)} />}
+            {quote.deliveryFeeKrw > 0 && <Row label="부름 요금" value={krw(quote.deliveryFeeKrw)} />}
             {quote.discountKrw > 0 && <Row label="쿠폰 할인" value={`-${krw(quote.discountKrw)}`} red />}
             {quote.creditUsedKrw > 0 && <Row label="크레딧" value={`-${krw(quote.creditUsedKrw)}`} red />}
             <div className="flex items-center justify-between pt-1 text-base font-bold">
@@ -259,11 +333,17 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
 
       <button
-        disabled={!quote || submitting}
+        disabled={!quote || submitting || deliveryIncomplete}
         onClick={submit}
         className="mt-4 w-full rounded-xl bg-sky-500 py-3 font-semibold text-white disabled:opacity-40"
       >
-        {submitting ? '결제 중...' : quote ? `${krw(quote.totalUpfrontKrw)} 결제하고 예약` : '견적 계산 중...'}
+        {submitting
+          ? '결제 중...'
+          : deliveryIncomplete
+            ? '부름 위치와 장소 이름을 입력하세요'
+            : quote
+              ? `${krw(quote.totalUpfrontKrw)} 결제하고 예약`
+              : '견적 계산 중...'}
       </button>
     </div>
   );

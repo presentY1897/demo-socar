@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELIVERY_FEE_MIN_KRW,
+  deliveryFee,
   FREE_DRIVE_KM,
   LATE_FEE_PER_MIN_KRW,
   ONEWAY_FEE_MIN_KRW,
@@ -123,6 +125,27 @@ describe('onewayFee', () => {
   });
   it('최소 5,000원을 보장한다', () => {
     expect(onewayFee(1200)).toBe(ONEWAY_FEE_MIN_KRW);
+  });
+});
+
+describe('deliveryFee — 부름(탁송) 요금', () => {
+  it('거리 비례 (km × 1,500원, 100원 단위)', () => {
+    expect(deliveryFee(4000)).toBe(6000); // 4km
+    expect(deliveryFee(5000)).toBe(7500);
+  });
+  it('최소 6,000원을 보장한다', () => {
+    expect(deliveryFee(800)).toBe(DELIVERY_FEE_MIN_KRW);
+  });
+  it('quote 선결제 총액에 포함된다', () => {
+    const q = quote({
+      plan,
+      startAt: wed(10),
+      endAt: wed(11),
+      insurance: 'LIGHT',
+      deliveryFeeKrw: 7500,
+    });
+    expect(q.deliveryFeeKrw).toBe(7500);
+    expect(q.totalUpfrontKrw).toBe(6000 + 700 + 7500);
   });
 });
 

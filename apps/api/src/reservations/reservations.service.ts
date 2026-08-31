@@ -2,17 +2,22 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  DELIVERY_MAX_RADIUS_M,
+  DELIVERY_MIN_LEAD_MINUTES,
+  deliveryFee,
   haversineMeters,
   onewayFee,
   quote,
   SLOT_MS,
   validateSlotRange,
   type CreateReservationDto,
+  type DeliveryDto,
   type ModifyReservationDto,
   type QuoteBreakdown,
   type QuoteRequestDto,
@@ -20,7 +25,11 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { effectiveZoneIdAt } from '../common/vehicle-location';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/travel-time';
 import type { JwtUser } from '../auth/jwt-auth.guard';
+
+/** 탁송 준비 버퍼 — 직전 반납 후 기사 배정·출발 준비 시간 */
+const DELIVERY_PREP_BUFFER_MS = 20 * 60 * 1000;
 
 /** PostgreSQL exclusion_violation (EXCLUDE USING GIST) 여부 */
 function isOverlapViolation(e: unknown): boolean {
@@ -31,6 +40,7 @@ function isOverlapViolation(e: unknown): boolean {
 interface QuoteResult {
   breakdown: QuoteBreakdown;
   returnZoneId: string | null;
+  delivery: DeliveryDto | null;
 }
 
 @Injectable()
@@ -38,6 +48,7 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
+    @Inject(TRAVEL_ESTIMATOR) private readonly travel: TravelTimeEstimator,
   ) {}
 
   /**
@@ -63,29 +74,59 @@ export class ReservationsService {
       throw new BadRequestException('법인 전용 차량은 오피스 배차를 통해서만 이용할 수 있습니다');
     }
 
+    const startAtDate = new Date(dto.startAt);
+    const startZoneId = effectiveZoneIdAt(vehicle.zoneId, vehicle.reservations, startAtDate);
+
     // 편도 반납 존 검증 + 수수료
     let onewayFeeKrw = 0;
     let returnZoneId: string | null = null;
-    if (dto.returnZoneId) {
-      const startZoneId = effectiveZoneIdAt(
-        vehicle.zoneId,
-        vehicle.reservations,
-        new Date(dto.startAt),
-      );
-      if (dto.returnZoneId !== startZoneId) {
-        const [startZone, returnZone] = await Promise.all([
-          db.zone.findUnique({ where: { id: startZoneId } }),
-          db.zone.findUnique({ where: { id: dto.returnZoneId } }),
-        ]);
-        if (!returnZone || returnZone.corporationId !== null) {
-          throw new NotFoundException('반납 존을 찾을 수 없습니다');
-        }
-        if (!startZone || returnZone.region !== startZone.region) {
-          throw new BadRequestException('같은 지역의 존으로만 편도 반납이 가능합니다');
-        }
-        onewayFeeKrw = onewayFee(haversineMeters(startZone, returnZone));
-        returnZoneId = returnZone.id;
+    if (dto.returnZoneId && dto.returnZoneId !== startZoneId) {
+      const [startZone, returnZone] = await Promise.all([
+        db.zone.findUnique({ where: { id: startZoneId } }),
+        db.zone.findUnique({ where: { id: dto.returnZoneId } }),
+      ]);
+      if (!returnZone || returnZone.corporationId !== null) {
+        throw new NotFoundException('반납 존을 찾을 수 없습니다');
       }
+      if (!startZone || returnZone.region !== startZone.region) {
+        throw new BadRequestException('같은 지역의 존으로만 편도 반납이 가능합니다');
+      }
+      onewayFeeKrw = onewayFee(haversineMeters(startZone, returnZone));
+      returnZoneId = returnZone.id;
+    }
+
+    // 부름(탁송) 검증 + 요금 — 반경, 리드타임, 직전 반납 후 탁송 가능 시간
+    let deliveryFeeKrw = 0;
+    let delivery: DeliveryDto | null = null;
+    if (dto.delivery) {
+      const startZone = await db.zone.findUnique({ where: { id: startZoneId } });
+      if (!startZone) throw new NotFoundException('출발 존을 찾을 수 없습니다');
+
+      if (haversineMeters(startZone, dto.delivery) > DELIVERY_MAX_RADIUS_M) {
+        throw new BadRequestException(
+          `부름은 존 반경 ${DELIVERY_MAX_RADIUS_M / 1000}km 안에서만 가능해요`,
+        );
+      }
+      if (startAtDate.getTime() < Date.now() + DELIVERY_MIN_LEAD_MINUTES * 60 * 1000) {
+        throw new BadRequestException(
+          `부름은 최소 ${DELIVERY_MIN_LEAD_MINUTES}분 이후 시각부터 예약할 수 있어요`,
+        );
+      }
+
+      const est = await this.travel.estimateDrive(startZone, dto.delivery, startZone.region);
+      // 직전 예약 반납(없으면 지금)부터 탁송이 시작 시각 전에 도착할 수 있어야 한다
+      const prevEnds = vehicle.reservations
+        .filter((r) => r.endAt.getTime() <= startAtDate.getTime())
+        .map((r) => r.endAt.getTime());
+      const gapStart = Math.max(Date.now(), ...prevEnds);
+      if (gapStart + est.seconds * 1000 + DELIVERY_PREP_BUFFER_MS > startAtDate.getTime()) {
+        throw new ConflictException(
+          '직전 반납 일정상 탁송 시간이 부족해요. 시작 시각을 늦추거나 다른 차량을 선택해 주세요',
+        );
+      }
+
+      deliveryFeeKrw = deliveryFee(est.meters);
+      delivery = dto.delivery;
     }
 
     let couponDiscountKrw = 0;
@@ -108,15 +149,16 @@ export class ReservationsService {
 
     const breakdown = quote({
       plan: vehicle.plan,
-      startAt: new Date(dto.startAt),
+      startAt: startAtDate,
       endAt: new Date(dto.endAt),
       insurance: dto.insurance,
       onewayFeeKrw,
+      deliveryFeeKrw,
       couponDiscountKrw,
       creditBalanceKrw,
       useCredit: dto.useCredit,
     });
-    return { breakdown, returnZoneId };
+    return { breakdown, returnZoneId, delivery };
   }
 
   async create(
@@ -135,7 +177,7 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const { breakdown, returnZoneId } = await this.resolveQuote(tx, user, dto, startAt, endAt, opts);
+        const { breakdown, returnZoneId, delivery } = await this.resolveQuote(tx, user, dto, startAt, endAt, opts);
 
         // 1차 확인: 겹치는 예약이 있으면 친절한 409 (최종 방어는 DB EXCLUDE 제약)
         await this.assertNoOverlap(tx, dto.vehicleId, startAt, endAt);
@@ -148,9 +190,13 @@ export class ReservationsService {
             endAt,
             insurance: dto.insurance,
             returnZoneId,
+            deliveryLat: delivery?.lat ?? null,
+            deliveryLng: delivery?.lng ?? null,
+            deliveryLabel: delivery?.label ?? null,
             rentalFeeKrw: breakdown.rentalFeeKrw,
             insuranceFeeKrw: breakdown.insuranceFeeKrw,
             onewayFeeKrw: breakdown.onewayFeeKrw,
+            deliveryFeeKrw: breakdown.deliveryFeeKrw,
             discountKrw: breakdown.discountKrw,
             creditUsedKrw: breakdown.creditUsedKrw,
             totalUpfrontKrw: breakdown.totalUpfrontKrw,
@@ -224,6 +270,10 @@ export class ReservationsService {
         if (resv.status !== 'CONFIRMED') throw new BadRequestException('이용 전 예약만 변경할 수 있습니다');
         if (resv.startAt.getTime() <= Date.now()) {
           throw new BadRequestException('시작 시각이 지난 예약은 변경할 수 없습니다');
+        }
+        if (resv.deliveryLabel) {
+          // 탁송 일정 재검증이 얽히므로 데모에서는 미지원 — 취소 후 재예약 안내
+          throw new BadRequestException('부름 예약은 시간 변경 대신 취소 후 다시 예약해 주세요');
         }
 
         await this.assertNoOverlap(tx, resv.vehicleId, startAt, endAt, id);
@@ -404,8 +454,8 @@ export class ReservationsService {
       return this.quoteFor(tx, user.id, dto);
     }
 
-    if (dto.returnZoneId) {
-      throw new BadRequestException('법인 전용 차량은 왕복만 가능합니다');
+    if (dto.returnZoneId || dto.delivery) {
+      throw new BadRequestException('법인 전용 차량은 존 왕복만 가능합니다');
     }
     const vehicle = await tx.vehicle.findUnique({ where: { id: dto.vehicleId } });
     if (!vehicle) throw new NotFoundException('차량을 찾을 수 없습니다');
@@ -418,11 +468,13 @@ export class ReservationsService {
 
     return {
       returnZoneId: null,
+      delivery: null,
       breakdown: {
         slotCount: Math.round((endAt.getTime() - startAt.getTime()) / SLOT_MS),
         rentalFeeKrw: 0,
         insuranceFeeKrw: 0,
         onewayFeeKrw: 0,
+        deliveryFeeKrw: 0,
         discountKrw: 0,
         creditUsedKrw: 0,
         totalUpfrontKrw: 0,

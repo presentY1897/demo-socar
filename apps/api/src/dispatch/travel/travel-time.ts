@@ -8,16 +8,18 @@ export interface TravelEstimate {
 }
 
 /**
- * 사람 이동 시간 추정기.
- * 기본 구현은 OSM 그래프 + A* (GraphTravelEstimator).
+ * 이동 시간 추정기.
+ * 기본 구현은 OSM 그래프 + A* (GraphTravelEstimator) — 도보(배차)와 운전(부름 탁송) 모두 지원.
  * 실서비스 전환 시 Kakao Mobility 등 외부 API 구현체로 교체하는 지점.
  */
 export interface TravelTimeEstimator {
   estimateWalk(from: Coord, to: Coord, region: string): Promise<TravelEstimate>;
+  estimateDrive(from: Coord, to: Coord, region: string): Promise<TravelEstimate>;
 }
 
 export const TRAVEL_ESTIMATOR = Symbol('TRAVEL_ESTIMATOR');
 
 export const WALK_SPEED_MPS = 1.25; // 도보 4.5km/h
+export const DRIVE_SPEED_MPS = 6.9; // 도심 주행 약 25km/h (신호 대기 포함)
 /** 직선거리 폴백 시 실제 경로 우회 보정 계수 */
 export const HAVERSINE_DETOUR_FACTOR = 1.3;
