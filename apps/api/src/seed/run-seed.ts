@@ -9,6 +9,14 @@ import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+/**
+ * 시드 데이터 버전. 시드 내용(존/차량/계정 구성)이 바뀌면 +1 —
+ * 배포 환경에서 DB에 기록된 버전과 비교해 자동으로 1회 재시드된다 (main.ts).
+ *   v1: 초기 시드 (수동 존 10곳)
+ *   v2: 실데이터 존 30곳 (전국주차장정보표준데이터 + OSM)
+ */
+export const SEED_VERSION = 2;
+
 interface ZoneDef {
   name: string;
   region: string;
@@ -321,7 +329,13 @@ export async function runSeed(prisma: PrismaClient) {
     }
   }
 
-  console.log(`seeded: zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}`);
+  await prisma.seedMeta.upsert({
+    where: { id: 1 },
+    create: { id: 1, version: SEED_VERSION },
+    update: { version: SEED_VERSION, seededAt: new Date() },
+  });
+
+  console.log(`seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}`);
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr   개인 이용자');
   console.log('  member@demo.mocar.kr 법인 임직원');

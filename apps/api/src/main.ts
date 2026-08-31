@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
-import { runSeed } from './seed/run-seed';
+import { runSeed, SEED_VERSION } from './seed/run-seed';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,18 +12,20 @@ async function bootstrap() {
   });
   app.enableShutdownHooks();
 
-  // Render 무료 티어에는 셸이 없어 배포 환경에서 부팅 시 시드
-  // - 'true': 빈 DB일 때만 1회
-  // - 'force': 부팅마다 전체 재시드 (시드 데이터 교체용 — 쓰고 나면 'true'로 되돌릴 것)
+  // Render 무료 티어에는 셸이 없어 배포 환경에서 부팅 시 시드를 판단한다.
+  // 시드는 버전 마커(SeedMeta)로 관리: 코드의 SEED_VERSION이 DB 기록보다 높으면
+  // 그 배포에서 딱 1회 재시드된다 — 시드 변경에 수동 개입이 필요 없다.
+  // AUTO_SEED=force는 비상용(무조건 재시드, 부팅마다 초기화되므로 평소엔 'true').
   if (process.env.AUTO_SEED === 'true' || process.env.AUTO_SEED === 'force') {
     const prisma = app.get(PrismaService);
-    const users = await prisma.user.count();
-    if (users === 0 || process.env.AUTO_SEED === 'force') {
-      console.log(`[api] AUTO_SEED=${process.env.AUTO_SEED}: 데모 데이터 시드 실행`);
+    const meta = await prisma.seedMeta.findUnique({ where: { id: 1 } });
+    const currentVersion = meta?.version ?? 0;
+    if (process.env.AUTO_SEED === 'force' || currentVersion < SEED_VERSION) {
+      console.log(
+        `[api] AUTO_SEED: 시드 v${currentVersion} → v${SEED_VERSION} 재시드 실행` +
+          (process.env.AUTO_SEED === 'force' ? ' (force)' : ''),
+      );
       await runSeed(prisma);
-      if (process.env.AUTO_SEED === 'force') {
-        console.warn('[api] AUTO_SEED=force 상태 — 부팅마다 DB가 초기화됩니다. true로 되돌리세요');
-      }
     }
   }
 

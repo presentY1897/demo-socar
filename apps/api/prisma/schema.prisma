@@ -7,6 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────── 시드 메타 ───────────────────────────
+
+// 시드 데이터의 버전 마커 — 코드의 SEED_VERSION이 이 값보다 크면 부팅 시 1회 재시드.
+// (Render 무료 티어는 셸이 없어 배포 후 수동 시드가 불가능하다)
+model SeedMeta {
+  id       Int      @id @default(1)
+  version  Int
+  seededAt DateTime @default(now())
+}
+
 // ─────────────────────────── 사용자 / 법인 ───────────────────────────
 
 enum Role {
