@@ -4,7 +4,9 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // dist 밖에 두면 dist만 지웠을 때 tsc가 "이미 출력함"으로 믿고 재출력을 건너뛴다 (turbo 캐시 복원도 같은 문제)
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src"],
   "exclude": ["src/**/*.spec.ts"]
