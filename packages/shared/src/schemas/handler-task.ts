@@ -109,3 +109,33 @@ export const completeHandlerTaskSchema = z.object({
   photos: requiredPhotosSchema,
 });
 export type CompleteHandlerTaskDto = z.infer<typeof completeHandlerTaskSchema>;
+
+/** 운영자 배정 (`POST /ops/tasks/:id/assign`) — 진행 전이면 담당자 교체(재배정)도 같은 문이다 */
+export const assignHandlerTaskSchema = z.object({
+  handlerId: z.string().min(1, '배정할 핸들러를 선택해 주세요'),
+});
+export type AssignHandlerTaskDto = z.infer<typeof assignHandlerTaskSchema>;
+
+/**
+ * 운영자가 직접 내는 재배치 작업 (`POST /ops/tasks`).
+ * 출발 존은 차량이 실제로 서 있는 곳이라 생략하면 서버가 채운다 — 운영자가 고른 값과
+ * 실제가 다르면 거절한다(차가 없는 존에서 출발하는 작업은 아무도 수행할 수 없다).
+ */
+export const createRepositionTaskSchema = z.object({
+  vehicleId: z.string().min(1),
+  fromZoneId: z.string().min(1).optional(),
+  toZoneId: z.string().min(1),
+  dueAt: z.string().datetime({ offset: true }),
+});
+export type CreateRepositionTaskDto = z.infer<typeof createRepositionTaskSchema>;
+
+/** `GET /ops/tasks` 필터 — 상태·타입·기한 날짜(YYYY-MM-DD) */
+export const opsTaskQuerySchema = z.object({
+  status: handlerTaskStatusSchema.optional(),
+  type: handlerTaskTypeSchema.optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '날짜는 YYYY-MM-DD 형식이어야 합니다')
+    .optional(),
+});
+export type OpsTaskQueryDto = z.infer<typeof opsTaskQuerySchema>;

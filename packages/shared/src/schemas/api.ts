@@ -556,3 +556,19 @@ export const handlerQueueSchema = z.object({
   done: z.array(handlerTaskSchema),
 });
 export type HandlerQueueRes = z.infer<typeof handlerQueueSchema>;
+
+/**
+ * `GET /ops/tasks/:id/candidates` — 이 작업을 맡길 핸들러 후보.
+ * "마지막 완료 작업을 끝낸 위치 → 이 작업의 출발지" 거리순이고, 완주 기록이 없는 핸들러는
+ * 거리를 알 수 없어 뒤에 기본 순서로 붙는다. 점수 대신 근거를 주고 판단은 운영자가 한다.
+ */
+export const handlerCandidateSchema = z.object({
+  handlerId: z.string(),
+  name: z.string(),
+  lastCompletedAt: z.string().nullable(),
+  lastPlaceLabel: z.string().nullable(),
+  distanceMeters: z.number().int().nullable(),
+  activeTaskCount: z.number().int(),
+  reasons: z.array(z.string()),
+});
+export type HandlerCandidateRes = z.infer<typeof handlerCandidateSchema>;

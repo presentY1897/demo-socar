@@ -30,6 +30,7 @@ import { ZonesModule } from './zones/zones.module';
     OpsModule,
     MetricsModule,
     HandlerModule,
+    OpsModule,
   ],
   controllers: [HealthController],
 })
