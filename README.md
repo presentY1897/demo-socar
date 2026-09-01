@@ -106,9 +106,15 @@ pnpm dev                                # web :3000 + api :4000
 ## 테스트
 
 ```bash
-pnpm test                     # 단위 34케이스: 요금 엔진·배차 스코어링·편도 위치 체인
+pnpm test                     # 단위 + 프론트: 요금 엔진·배차 스코어링·편도 위치 체인 · 화면(Vitest+RTL+MSW)
+pnpm --filter @socar/web test # 프론트만 — MSW 목 서버로 API를 대신한다 (서버·DB 불필요)
 pnpm --filter @socar/api test:int   # 통합 14케이스: 동시 예약 경합, 연장 충돌, 편도 존 이동, 부름 제약, 변경 차액 (DB 필요)
 ```
+
+프론트 테스트는 실제 API를 띄우지 않고 **MSW 목 서버**로 대체한다. 목 응답은
+`packages/shared`의 응답 스키마(`schemas/api.ts`)로 `parse`해서 만들기 때문에,
+API가 계약을 바꾸면 목이 먼저 깨진다 — 계약과 어긋난 목으로 테스트가 통과하는 일이 없다.
+작성 방법은 [`apps/web/src/test/README.md`](apps/web/src/test/README.md).
 
 ## 스코프 아웃 (의도적 결정)
 

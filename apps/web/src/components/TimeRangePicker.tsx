@@ -16,7 +16,10 @@ export function TimeRangePicker({
   compact?: boolean;
 }) {
   const set = (which: 'start' | 'end', date: string, time: string) => {
+    // 날짜 입력을 비우면 브라우저가 빈 문자열로 change를 쏜다 — 무효한 값은 무시한다
+    if (!date || !time) return;
     const iso = fromParts(date, time);
+    if (Number.isNaN(new Date(iso).getTime())) return;
     if (which === 'start') onChange(iso, endAt);
     else onChange(startAt, iso);
   };
