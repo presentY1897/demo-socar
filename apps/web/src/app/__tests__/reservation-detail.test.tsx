@@ -74,6 +74,8 @@ describe('예약 상세 — 이용 단계형 흐름', () => {
     // 1단계는 완료로 접히고 스마트키(2)·체크아웃(4) 단계가 열린다
     await waitFor(() => expect(step(1)).toHaveAttribute('data-state', 'done'));
     expect(step(2)).toHaveAttribute('data-state', 'current');
+    // 2단계가 열리면서 스마트키 패널이 실제로 붙는다
+    expect(screen.getByTestId('door-state')).toHaveTextContent('잠김');
     expect(await screen.findByRole('button', { name: '체크아웃 완료' })).toBeInTheDocument();
   });
 

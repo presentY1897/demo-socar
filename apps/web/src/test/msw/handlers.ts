@@ -6,13 +6,16 @@ import {
   loginResponseSchema,
   quoteBreakdownSchema,
   quote,
+  applyControl,
   rentalSchema,
   rentalUsageSchema,
   reservationSchema,
+  vehicleControlResultSchema,
   vehicleDetailSchema,
   zoneDetailSchema,
   zoneMarkerSchema,
   type QuoteRequestDto,
+  type VehicleControlActionValue,
 } from '@socar/shared';
 import {
   conditionCheckIn,
@@ -22,6 +25,7 @@ import {
   rentalInUse,
   reservationConfirmed,
   reservationInUse,
+  smartKeyLocked,
   usageEmpty,
   userCorpAdmin,
   userOpsAdmin,
@@ -138,6 +142,18 @@ export const handlers = [
   http.post(url('/rentals/:id/check-out'), () =>
     json(conditionReportSchema, conditionCheckOut, 201),
   ),
+
+  // 스마트키는 실제 상태 머신을 그대로 돌린다 — 목이 규칙을 따로 흉내내지 않도록
+  http.post(url('/rentals/:id/control'), async ({ request }) => {
+    const { action } = (await request.json()) as { action: VehicleControlActionValue };
+    const outcome = applyControl(smartKeyLocked, action);
+    if (!outcome.ok) return HttpResponse.json({ message: outcome.reason }, { status: 400 });
+    return json(vehicleControlResultSchema, {
+      action,
+      at: '2030-01-02T01:05:00.000Z',
+      state: { ...outcome.state, lastAction: action, lastActionAt: '2030-01-02T01:05:00.000Z' },
+    });
+  }),
 
   http.post(url('/rentals/:id/return'), () => json(rentalSchema, rentalCompleted, 201)),
 

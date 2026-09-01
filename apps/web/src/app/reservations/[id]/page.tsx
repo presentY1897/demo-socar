@@ -10,6 +10,7 @@ import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/li
 import { fromParts, TIMES_10MIN, toDatePart, toTimePart } from '@/lib/timerange';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { ConditionReportForm, ConditionReportSummary } from '@/components/ConditionReportForm';
+import { SmartKeyPanel } from '@/components/SmartKeyPanel';
 
 interface Detail {
   id: string;
@@ -181,10 +182,12 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
             state={checkOut ? 'done' : checkIn ? 'current' : 'todo'}
             summary={checkIn ? undefined : '체크인 후 사용할 수 있어요'}
           >
-            {/* M1-4: 스마트키 패널 자리 · M1-6: 차종별 매뉴얼 링크 자리 */}
-            <p className="text-xs text-gray-400">
-              체크인을 마치면 스마트키로 문을 열고 시동을 걸 수 있어요
-            </p>
+            {/* M1-6: 차종별 매뉴얼 링크 자리 */}
+            {usage?.smartKey ? (
+              <SmartKeyPanel rentalId={rental.id} state={usage.smartKey} />
+            ) : (
+              <p className="text-xs text-gray-400">차량 상태를 불러오는 중이에요</p>
+            )}
           </Step>
 
           <Step

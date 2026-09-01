@@ -4,9 +4,11 @@ import {
   checkInSchema,
   checkOutSchema,
   extendRentalSchema,
+  vehicleControlSchema,
   type CheckInDto,
   type CheckOutDto,
   type ExtendRentalDto,
+  type VehicleControlDto,
 } from '@socar/shared';
 import { CurrentUser } from '../auth/decorators';
 import type { JwtUser } from '../auth/jwt-auth.guard';
@@ -45,6 +47,16 @@ export class RentalsController {
     @Body(new ZodValidationPipe(checkOutSchema)) dto: CheckOutDto,
   ) {
     return this.rentals.checkOut(user, id, dto);
+  }
+
+  /** 가상 스마트키 — 문/시동/비상등/경적. 체크인을 마쳐야 열린다 */
+  @Post(':id/control')
+  control(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(vehicleControlSchema)) dto: VehicleControlDto,
+  ) {
+    return this.rentals.control(user, id, dto);
   }
 
   /** 단계형 화면이 현재 단계를 판단하는 이용 상태 요약 */

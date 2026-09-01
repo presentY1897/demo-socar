@@ -7,6 +7,7 @@ import {
   rentalSchema,
   rentalUsageSchema,
   reservationSchema,
+  smartKeyStateSchema,
   vehicleSummarySchema,
   zoneDetailSchema,
   zoneMarkerSchema,
@@ -267,11 +268,20 @@ export const conditionCheckOut: ConditionReportRes = make(conditionReportSchema,
   photos: [storedPhoto('photo-out-1')],
 });
 
+/** 스마트키 초기 상태 — 문 잠김·시동 꺼짐 */
+export const smartKeyLocked = make(smartKeyStateSchema, {
+  doorLocked: true,
+  engineOn: false,
+  lastAction: null,
+  lastActionAt: null,
+});
+
 /** 체크인/아웃 전 기본 상태 */
 export const usageEmpty: RentalUsageRes = make(rentalUsageSchema, {
   rentalId: rentalInUse.id,
   checkIn: null,
   checkOut: null,
+  smartKey: smartKeyLocked,
 });
 
 export const usageCheckedIn: RentalUsageRes = make(rentalUsageSchema, {

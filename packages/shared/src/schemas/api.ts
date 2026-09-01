@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { conditionPhaseSchema } from './condition';
+import { vehicleControlActionSchema } from './control';
 import { storedPhotoSchema } from './photo';
 import { insuranceTierSchema } from './reservation';
 
@@ -186,6 +187,23 @@ export const conditionReportSchema = z.object({
 });
 export type ConditionReportRes = z.infer<typeof conditionReportSchema>;
 
+/** 가상 스마트키가 보여주는 차량 상태 (M3-1에서 텔레메트리로 통합 예정) */
+export const smartKeyStateSchema = z.object({
+  doorLocked: z.boolean(),
+  engineOn: z.boolean(),
+  lastAction: vehicleControlActionSchema.nullable(),
+  lastActionAt: z.string().nullable(),
+});
+export type SmartKeyStateRes = z.infer<typeof smartKeyStateSchema>;
+
+/** `POST /rentals/:id/control` — 조작 결과와 갱신된 상태 */
+export const vehicleControlResultSchema = z.object({
+  action: vehicleControlActionSchema,
+  at: z.string(),
+  state: smartKeyStateSchema,
+});
+export type VehicleControlResultRes = z.infer<typeof vehicleControlResultSchema>;
+
 /**
  * `GET /rentals/:id/usage` — 단계형 화면이 "지금 어느 단계인가"를 판단하는 단일 소스.
  * 단계별로 최신 보고 1건만 유효 보고로 본다 (m1-3 문서의 재제출 정책 참고).
@@ -194,6 +212,7 @@ export const rentalUsageSchema = z.object({
   rentalId: z.string(),
   checkIn: conditionReportSchema.nullable(),
   checkOut: conditionReportSchema.nullable(),
+  smartKey: smartKeyStateSchema,
 });
 export type RentalUsageRes = z.infer<typeof rentalUsageSchema>;
 

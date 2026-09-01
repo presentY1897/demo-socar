@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  applyControl,
   quote,
   settle,
   validateSlotRange,
@@ -15,6 +16,9 @@ import {
   type ConditionReportRes,
   type ExtendRentalDto,
   type RentalUsageRes,
+  type SmartKeyStateRes,
+  type VehicleControlDto,
+  type VehicleControlResultRes,
 } from '@socar/shared';
 import { PaymentsService } from '../payments/payments.service';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
@@ -33,7 +37,8 @@ function isOverlapViolation(e: unknown): boolean {
  * 대여 라이프사이클 상태 머신.
  *
  *   Reservation(CONFIRMED) --이용 시작--> Rental(IN_USE) + Reservation(IN_USE)
- *   Rental(IN_USE) --체크인--> ConditionReport(CHECK_IN) → 스마트키(M1-4) 해금
+ *   Rental(IN_USE) --체크인--> ConditionReport(CHECK_IN) → 스마트키 해금
+ *   Rental(IN_USE) --스마트키--> VehicleControlLog + Vehicle.doorLocked/engineOn
  *   Rental(IN_USE) --연장--> 반납 시각 연장 (뒤 예약과 충돌 시 409)
  *   Rental(IN_USE) --체크아웃--> ConditionReport(CHECK_OUT) → 반납 해금
  *   Rental(IN_USE) --반납하기--> Rental(RETURN_PENDING, 주행거리 자동 확정)
@@ -308,15 +313,84 @@ export class RentalsService {
 
   /** 단계형 화면이 "지금 어느 단계인가"를 판단하는 단일 소스 */
   async usage(user: JwtUser, rentalId: string): Promise<RentalUsageRes> {
-    await this.ownedRental(this.prisma, user, rentalId);
-    const [checkIn, checkOut] = await Promise.all([
+    const rental = await this.ownedRental(this.prisma, user, rentalId);
+    const [checkIn, checkOut, smartKey] = await Promise.all([
       this.latestReport(this.prisma, rentalId, 'CHECK_IN'),
       this.latestReport(this.prisma, rentalId, 'CHECK_OUT'),
+      this.smartKeyState(this.prisma, rentalId, rental.reservation.vehicleId),
     ]);
     return {
       rentalId,
       checkIn: checkIn && this.toReportRes(checkIn),
       checkOut: checkOut && this.toReportRes(checkOut),
+      smartKey,
+    };
+  }
+
+  /**
+   * 가상 스마트키 조작 — 문/시동/비상등/경적.
+   *
+   * 체크인을 마친 본인의 이용 중 대여에서만 열린다(403). 정합성 규칙(시동 중 잠금 금지 등)은
+   * shared의 `applyControl`이 유일한 근거라 화면의 버튼 활성 조건과 절대 어긋나지 않는다.
+   */
+  async control(
+    user: JwtUser,
+    rentalId: string,
+    dto: VehicleControlDto,
+  ): Promise<VehicleControlResultRes> {
+    return this.prisma.$transaction(async (tx) => {
+      const rental = await this.ownedRental(tx, user, rentalId);
+      if (rental.status !== 'IN_USE') {
+        throw new ForbiddenException('이용 중인 대여에서만 스마트키를 쓸 수 있습니다');
+      }
+      if (!(await this.latestReport(tx, rentalId, 'CHECK_IN'))) {
+        throw new ForbiddenException('체크인을 먼저 완료해야 스마트키를 쓸 수 있어요');
+      }
+
+      const vehicleId = rental.reservation.vehicleId;
+      const vehicle = await tx.vehicle.findUniqueOrThrow({
+        where: { id: vehicleId },
+        select: { doorLocked: true, engineOn: true },
+      });
+
+      const outcome = applyControl(vehicle, dto.action);
+      if (!outcome.ok) throw new BadRequestException(outcome.reason);
+
+      // 거절된 조작은 남기지 않는다 — 로그는 "실제로 차에 일어난 일"이어야 한다
+      const log = await tx.vehicleControlLog.create({
+        data: { rentalId, vehicleId, action: dto.action },
+      });
+      await tx.vehicle.update({ where: { id: vehicleId }, data: outcome.state });
+
+      return {
+        action: dto.action,
+        at: log.at.toISOString(),
+        state: {
+          ...outcome.state,
+          lastAction: dto.action,
+          lastActionAt: log.at.toISOString(),
+        },
+      };
+    });
+  }
+
+  private async smartKeyState(
+    db: Db,
+    rentalId: string,
+    vehicleId: string,
+  ): Promise<SmartKeyStateRes> {
+    const [vehicle, last] = await Promise.all([
+      db.vehicle.findUniqueOrThrow({
+        where: { id: vehicleId },
+        select: { doorLocked: true, engineOn: true },
+      }),
+      db.vehicleControlLog.findFirst({ where: { rentalId }, orderBy: { at: 'desc' } }),
+    ]);
+    return {
+      doorLocked: vehicle.doorLocked,
+      engineOn: vehicle.engineOn,
+      lastAction: last?.action ?? null,
+      lastActionAt: last?.at.toISOString() ?? null,
     };
   }
 
