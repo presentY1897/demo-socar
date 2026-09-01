@@ -45,6 +45,13 @@ describe('이용 플로우 도메인 (통합) — 체크인/아웃·스마트키
       },
     });
     vehicleId = vehicle.id;
+    // 스마트키 상태는 텔레메트리가 갖는다 (M3-1 이관)
+    await prisma.vehicleTelemetry.create({
+      data: {
+        vehicleId, fuelPct: 68, odometerKm: 14200,
+        doorLocked: true, engineOn: false, lat: zone.lat, lng: zone.lng,
+      },
+    });
     const user = await prisma.user.create({
       data: { email, name: '이용플로우', role: 'USER', passwordHash: await bcrypt.hash('test1234', 4) },
     });
@@ -128,9 +135,9 @@ describe('이용 플로우 도메인 (통합) — 체크인/아웃·스마트키
     expect(rental.conditionReports).toHaveLength(2);
   });
 
-  it('스마트키 조작 이력·문의·사고 접수가 저장되고 차량 임시 상태가 갱신된다', async () => {
-    // 차량 임시 상태 기본값: 잠김 + 시동 꺼짐
-    const before = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
+  it('스마트키 조작 이력·문의·사고 접수가 저장되고 차량 센서 상태가 갱신된다', async () => {
+    // 센서 상태 기본값: 잠김 + 시동 꺼짐 (M3-1에서 Vehicle → VehicleTelemetry로 이관)
+    const before = await prisma.vehicleTelemetry.findUniqueOrThrow({ where: { vehicleId } });
     expect(before.doorLocked).toBe(true);
     expect(before.engineOn).toBe(false);
 
@@ -140,8 +147,8 @@ describe('이용 플로우 도메인 (통합) — 체크인/아웃·스마트키
         { rentalId, vehicleId, action: 'IGNITION_ON' },
       ],
     });
-    const after = await prisma.vehicle.update({
-      where: { id: vehicleId },
+    const after = await prisma.vehicleTelemetry.update({
+      where: { vehicleId },
       data: { doorLocked: false, engineOn: true },
     });
     expect(after.doorLocked).toBe(false);

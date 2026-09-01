@@ -359,8 +359,9 @@ describe('M2 부름 전 과정 E2E (통합) — 예약 한 건이 사람의 작�
     expect(body.photos).toHaveLength(1); // 인계 증빙은 완료 응답에만 실린다
 
     const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
-    expect(vehicle.doorLocked).toBe(true); // 이용자가 스마트키로 여는 상태로 인계
-    expect(vehicle.engineOn).toBe(false);
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({ where: { vehicleId } });
+    expect(telemetry.doorLocked).toBe(true); // 이용자가 스마트키로 여는 상태로 인계
+    expect(telemetry.engineOn).toBe(false);
     // 제자리 회수(ADR-006)라 배달 시점에 존을 옮기면 위치 체인(ADR-005)이 실제와 어긋난다
     expect(vehicle.zoneId).toBe(homeZoneId);
 
@@ -467,8 +468,9 @@ describe('M2 부름 전 과정 E2E (통합) — 예약 한 건이 사람의 작�
     // 실물 반영: 차는 원래 존에 잠긴 채 서 있다
     const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
     expect(vehicle.zoneId).toBe(homeZoneId);
-    expect(vehicle.doorLocked).toBe(true);
-    expect(vehicle.engineOn).toBe(false);
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({ where: { vehicleId } });
+    expect(telemetry.doorLocked).toBe(true);
+    expect(telemetry.engineOn).toBe(false);
 
     // 부름 한 바퀴가 닫혔다 — 이 차량에 남은 미완료 작업이 없다
     const remaining = await prisma.handlerTask.findMany({

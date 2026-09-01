@@ -26,6 +26,7 @@ import {
 } from '@socar/shared';
 import { HandlerTasksService } from '../handler/handler-tasks.service';
 import { PaymentsService } from '../payments/payments.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtUser } from '../auth/jwt-auth.guard';
@@ -43,7 +44,7 @@ function isOverlapViolation(e: unknown): boolean {
  *
  *   Reservation(CONFIRMED) --이용 시작--> Rental(IN_USE) + Reservation(IN_USE)
  *   Rental(IN_USE) --체크인--> ConditionReport(CHECK_IN) → 스마트키 해금
- *   Rental(IN_USE) --스마트키--> VehicleControlLog + Vehicle.doorLocked/engineOn
+ *   Rental(IN_USE) --스마트키--> VehicleControlLog + VehicleTelemetry.doorLocked/engineOn
  *   Rental(IN_USE) --연장--> 반납 시각 연장 (뒤 예약과 충돌 시 409)
  *   Rental(IN_USE) --체크아웃--> ConditionReport(CHECK_OUT) → 반납 해금
  *   Rental(IN_USE) --반납하기--> Rental(RETURN_PENDING, 주행거리 자동 확정)
@@ -58,6 +59,7 @@ export class RentalsService {
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
     private readonly handlerTasks: HandlerTasksService,
+    private readonly telemetry: TelemetryService,
   ) {}
 
   /** 스마트키 문열기 = 대여 시작 */
@@ -358,19 +360,17 @@ export class RentalsService {
       }
 
       const vehicleId = rental.reservation.vehicleId;
-      const vehicle = await tx.vehicle.findUniqueOrThrow({
-        where: { id: vehicleId },
-        select: { doorLocked: true, engineOn: true },
-      });
+      // 문 잠금·시동은 차량이 아니라 텔레메트리가 갖는다 (M3-1에서 이관)
+      const telemetry = await this.telemetry.ensure(tx, vehicleId);
 
-      const outcome = applyControl(vehicle, dto.action);
+      const outcome = applyControl(telemetry, dto.action);
       if (!outcome.ok) throw new BadRequestException(outcome.reason);
 
       // 거절된 조작은 남기지 않는다 — 로그는 "실제로 차에 일어난 일"이어야 한다
       const log = await tx.vehicleControlLog.create({
         data: { rentalId, vehicleId, action: dto.action },
       });
-      await tx.vehicle.update({ where: { id: vehicleId }, data: outcome.state });
+      await this.telemetry.applySmartKey(tx, vehicleId, outcome.state);
 
       return {
         action: dto.action,
@@ -431,16 +431,13 @@ export class RentalsService {
     rentalId: string,
     vehicleId: string,
   ): Promise<SmartKeyStateRes> {
-    const [vehicle, last] = await Promise.all([
-      db.vehicle.findUniqueOrThrow({
-        where: { id: vehicleId },
-        select: { doorLocked: true, engineOn: true },
-      }),
+    const [telemetry, last] = await Promise.all([
+      this.telemetry.ensure(db, vehicleId),
       db.vehicleControlLog.findFirst({ where: { rentalId }, orderBy: { at: 'desc' } }),
     ]);
     return {
-      doorLocked: vehicle.doorLocked,
-      engineOn: vehicle.engineOn,
+      doorLocked: telemetry.doorLocked,
+      engineOn: telemetry.engineOn,
       lastAction: last?.action ?? null,
       lastActionAt: last?.at.toISOString() ?? null,
     };

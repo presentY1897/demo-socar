@@ -54,6 +54,13 @@ describe('가상 스마트키 (통합)', () => {
       },
     });
     vehicleId = vehicle.id;
+    // 스마트키 상태는 텔레메트리가 갖는다 (M3-1 이관) — 차는 잠긴 채 서 있는 상태로 시작
+    await prisma.vehicleTelemetry.create({
+      data: {
+        vehicleId, fuelPct: 68, odometerKm: 14200,
+        doorLocked: true, engineOn: false, lat: zone.lat, lng: zone.lng,
+      },
+    });
 
     const passwordHash = await bcrypt.hash('test1234', 4);
     await prisma.user.create({ data: { email, name: '스마트키', role: 'USER', passwordHash } });
@@ -101,9 +108,12 @@ describe('가상 스마트키 (통합)', () => {
     return started.body.id;
   }
 
-  /** 차량 임시 상태를 초기값(잠김·시동 꺼짐)으로 되돌린다 */
+  /** 차량 센서 상태를 초기값(잠김·시동 꺼짐)으로 되돌린다 — M3-1에서 텔레메트리로 이관 */
   const resetVehicle = () =>
-    prisma.vehicle.update({ where: { id: vehicleId }, data: { doorLocked: true, engineOn: false } });
+    prisma.vehicleTelemetry.update({
+      where: { vehicleId },
+      data: { doorLocked: true, engineOn: false },
+    });
 
   const finish = async (rentalId: string) => {
     await post(`/rentals/${rentalId}/check-out`).send({ parkingNote: '1층', photos: [photo()] }).expect(201);
@@ -119,8 +129,8 @@ describe('가상 스마트키 (통합)', () => {
 
     // 조작이 없었으니 로그도 차량 상태도 그대로다
     expect(await prisma.vehicleControlLog.count({ where: { rentalId } })).toBe(0);
-    const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
-    expect(vehicle.doorLocked).toBe(true);
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({ where: { vehicleId } });
+    expect(telemetry.doorLocked).toBe(true);
 
     await post(`/rentals/${rentalId}/check-in`).send({ photos: [photo()] }).expect(201);
     await finish(rentalId);

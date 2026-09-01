@@ -4,12 +4,13 @@
  * - 데모 계정 7종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
  * - 지표/배차 리스크 계산용 과거 이용 이력 (결정적 난수로 재현 가능)
  */
-import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus, HandlerTaskType, HandlerTaskStatus } from '@prisma/client';
+import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus, HandlerTaskType, HandlerTaskStatus, AcquisitionType, InquiryCategory, InquiryStatus, IncidentStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DELIVERY_MIN_LEAD_MINUTES } from '@socar/shared';
 import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
+import { initialTelemetry } from '../telemetry/telemetry-defaults';
 
 /**
  * 시드 데이터 버전. 시드 내용(존/차량/계정 구성)이 바뀌면 +1 —
@@ -20,8 +21,9 @@ import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
  *   v4: 법인 등급(corpGrade) 부여 + 리스 계약(LeaseContract) + viewer 계정
  *   v5: approver 계정 추가 — 등급 4종을 계정 스위칭만으로 시연할 수 있게
  *   v6: 핸들러 도메인 추가 (HANDLER 계정 + 부름 배달/회수·재배치 샘플 작업)
+ *   v7: 운영 백오피스 도메인 (텔레메트리·존 계약·도입/보험) + 경고 4종·유의 유저·문의함 데모 데이터
  */
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 
 interface ZoneDef {
   name: string;
@@ -111,6 +113,10 @@ export async function runSeed(prisma: PrismaClient) {
     prisma.coupon.deleteMany(),
     prisma.creditLedger.deleteMany(),
     prisma.leaseContract.deleteMany(),
+    prisma.vehicleMaintenanceNote.deleteMany(),
+    prisma.vehicleTelemetry.deleteMany(),
+    prisma.vehicleFinance.deleteMany(),
+    prisma.zoneContract.deleteMany(),
     prisma.vehicle.deleteMany(),
     prisma.zone.deleteMany(),
     prisma.pricingPlan.deleteMany(),
@@ -560,6 +566,240 @@ export async function runSeed(prisma: PrismaClient) {
     }
   }
 
+  // ─────────────── 운영 백오피스 데모 데이터 (M3-1) ───────────────
+  // 백오피스는 "이상한 것"을 보여주는 화면이라, 시드에 이상한 케이스가 없으면 빈 화면만 남는다.
+  // 경고 피드(`/ops/alerts`)의 4종이 시드만으로 전부 뜨도록 케이스를 심는다:
+  //   ① 연료 부족(<20%) ② 보험 만기 임박(D-30) ③ 존 계약 만료 임박(D-30) ④ 지연 반납 진행 중
+
+  /** 오늘 기준 N일 뒤(정오) — 만기 D-day 케이스를 만들 때 쓴다 */
+  const daysFromNow = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    d.setHours(12, 0, 0, 0);
+    return d;
+  };
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600 * 1000);
+
+  const opsAdmin = seeded(accounts, 'email', 'ops@demo.mocar.kr');
+  const allZones = await prisma.zone.findMany({ orderBy: { name: 'asc' } });
+  const allVehicles = await prisma.vehicle.findMany({
+    orderBy: { plateNo: 'asc' },
+    include: { zone: { select: { lat: true, lng: true } } },
+  });
+
+  // ── 존 계약 ── 3곳 중 1곳은 무료(공영 개방), 나머지는 유료 제휴
+  const PARKING_PARTNERS = ['하이파킹', '파킹클라우드', '아이파킹', '메가파크', 'GS파크24'];
+  const isPaidZone = (i: number) => i % 3 !== 0;
+  // 만료 임박 케이스는 "유료 존 중 첫 번째"로 고정한다 — 존 목록이 바뀌어도 케이스가 사라지지 않게
+  const expiringZoneId = allZones.find((_, i) => isPaidZone(i))?.id ?? allZones[0]?.id;
+  for (const [i, zone] of allZones.entries()) {
+    const paid = isPaidZone(i);
+    await prisma.zoneContract.create({
+      data: {
+        zoneId: zone.id,
+        isPaid: paid,
+        partnerName: paid ? PARKING_PARTNERS[i % PARKING_PARTNERS.length] : null,
+        monthlyFeeKrw: paid ? 150000 + (i % 7) * 50000 : 0,
+        contractStart: paid ? monthsFromNow(-12 - (i % 6)) : null,
+        contractEnd: paid
+          ? zone.id === expiringZoneId
+            ? daysFromNow(12) // ③ 계약 만료 임박
+            : monthsFromNow(6 + (i % 12))
+          : null,
+      },
+    });
+  }
+
+  // ── 도입 비용 / 보험 ── MOCAR가 쓴 돈 관점 (법인에 받는 LeaseContract와 반대 방향)
+  const INSURERS = ['모카손해보험', '한빛화재해상', '대성해상화재', '서울다이렉트'];
+  const insuranceExpiringId = allVehicles[3]?.id ?? allVehicles[0]?.id;
+  for (const [i, v] of allVehicles.entries()) {
+    const leased = i % 3 === 0;
+    await prisma.vehicleFinance.create({
+      data: {
+        vehicleId: v.id,
+        acquisitionType: leased ? AcquisitionType.LEASE : AcquisitionType.PURCHASE,
+        acquisitionCostKrw: leased ? null : 18000000 + (i % 28) * 1000000,
+        monthlyLeaseKrw: leased ? 320000 + (i % 8) * 30000 : null,
+        acquiredAt: monthsFromNow(-(6 + (i % 30))),
+        insurerName: INSURERS[i % INSURERS.length],
+        insurancePremiumKrw: 38000 + (i % 12) * 4000,
+        insuranceExpiresAt:
+          v.id === insuranceExpiringId
+            ? daysFromNow(18) // ② 보험 만기 임박
+            : monthsFromNow(2 + (i % 13)),
+      },
+    });
+  }
+
+  // ── 텔레메트리 ── 초기값은 차량 id에서 결정적으로 뽑는다 (telemetry-defaults.ts)
+  const lowFuelId = allVehicles[1]?.id ?? allVehicles[0]?.id;
+  for (const v of allVehicles) {
+    const base = initialTelemetry(v.id, v.zone);
+    await prisma.vehicleTelemetry.create({
+      data: {
+        vehicleId: v.id,
+        ...base,
+        fuelPct: v.id === lowFuelId ? 12.4 : base.fuelPct, // ① 연료 부족
+      },
+    });
+  }
+
+  // ── ④ 지연 반납 진행 중 ── 반납 예정 시각이 지났는데 아직 이용 중인 대여
+  const lateStartAt = hoursAgo(4);
+  const lateEndAt = hoursAgo(0.7);
+  const occupied = new Set<string>([
+    ...(
+      await prisma.reservation.findMany({
+        where: {
+          status: { not: ReservationStatus.CANCELED },
+          startAt: { lt: lateEndAt },
+          endAt: { gt: lateStartAt },
+        },
+        select: { vehicleId: true },
+      })
+    ).map((r) => r.vehicleId),
+    ...(
+      await prisma.handlerTask.findMany({
+        where: {
+          status: {
+            in: [HandlerTaskStatus.PENDING, HandlerTaskStatus.ASSIGNED, HandlerTaskStatus.EN_ROUTE],
+          },
+        },
+        select: { vehicleId: true },
+      })
+    ).map((t) => t.vehicleId),
+  ]);
+  const lateVehicle = allVehicles.find((v) => v.corporationId === null && !occupied.has(v.id));
+  if (lateVehicle) {
+    occupied.add(lateVehicle.id);
+    await prisma.reservation.create({
+      data: {
+        userId: user.id,
+        vehicleId: lateVehicle.id,
+        startAt: lateStartAt,
+        endAt: lateEndAt,
+        status: ReservationStatus.IN_USE,
+        insurance: InsuranceTier.STANDARD,
+        rentalFeeKrw: 18000,
+        insuranceFeeKrw: 4200,
+        totalUpfrontKrw: 22200,
+        createdAt: hoursAgo(6),
+        rental: { create: { status: RentalStatus.IN_USE, startedAt: lateStartAt } },
+        payments: {
+          create: [
+            {
+              kind: PaymentKind.UPFRONT,
+              amountKrw: 22200,
+              status: PaymentStatus.CAPTURED,
+              idempotencyKey: 'seed-late-return',
+              cardLast4: '4242',
+              approvedAt: hoursAgo(6),
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  // ── 유의 유저 (고객 탭) ── 지연 반납·사고·결제 거절이 한 계정에 몰리도록 확정한다.
+  // 새 예약을 만들지 않고 기존 완료 이력을 고쳐 쓴다 — 시간 겹침(EXCLUDE) 제약을 건드리지 않는 쪽.
+  const riskRentals = await prisma.rental.findMany({
+    where: {
+      status: RentalStatus.COMPLETED,
+      returnedAt: { gte: new Date(Date.now() - 30 * 24 * 3600 * 1000) },
+      reservation: { userId: user.id },
+    },
+    orderBy: { startedAt: 'desc' },
+    take: 3,
+  });
+  for (const [i, r] of riskRentals.entries()) {
+    const lateMinutes = 25 + i * 20;
+    await prisma.rental.update({
+      where: { id: r.id },
+      data: { lateMinutes, lateFeeKrw: lateMinutes * 200 },
+    });
+  }
+  if (riskRentals[0]) {
+    await prisma.incidentReport.create({
+      data: {
+        rentalId: riskRentals[0].id,
+        description: '주차 중 우측 후방 범퍼 접촉 — 상대 차량 없음, 자차 흠집만 확인',
+        status: IncidentStatus.PROCESSING,
+      },
+    });
+  }
+  // 결제 거절 — 매출 집계는 CAPTURED만 세므로 손익에는 영향이 없고, 리스크 집계에만 잡힌다
+  for (const [i, r] of riskRentals.slice(0, 2).entries()) {
+    await prisma.payment.create({
+      data: {
+        reservationId: r.reservationId,
+        kind: PaymentKind.DRIVE_SETTLEMENT,
+        amountKrw: 12000 + i * 3000,
+        status: PaymentStatus.FAILED,
+        idempotencyKey: `seed-payfail-${i}`,
+        cardLast4: '4242',
+        failReason: '카드 한도 초과',
+      },
+    });
+  }
+
+  // ── 문의함 (고객 탭) ── 답변 대기 2건 + 답변 완료 1건
+  await prisma.inquiry.createMany({
+    data: [
+      {
+        userId: user.id,
+        vehicleId: allVehicles[0]?.id ?? null,
+        category: InquiryCategory.VEHICLE,
+        body: '블루투스 연결이 계속 끊깁니다. 다음 이용자도 불편할 것 같아 남깁니다.',
+        status: InquiryStatus.OPEN,
+        createdAt: hoursAgo(30),
+      },
+      {
+        userId: corpMember.id,
+        category: InquiryCategory.RETURN,
+        body: '반납 후 주행요금이 예상보다 많이 나왔는데 산정 내역을 확인하고 싶습니다.',
+        status: InquiryStatus.OPEN,
+        createdAt: hoursAgo(8),
+      },
+      {
+        userId: user.id,
+        category: InquiryCategory.RESERVATION,
+        body: '예약한 반납 시각을 늦추려면 어떻게 하나요?',
+        status: InquiryStatus.ANSWERED,
+        answer: '이용 중 예약 상세 화면에서 반납 시각을 연장할 수 있어요. 연장분 요금은 그 자리에서 결제됩니다.',
+        answeredAt: hoursAgo(50),
+        answeredById: opsAdmin.id,
+        createdAt: hoursAgo(72),
+      },
+    ],
+  });
+
+  // ── 정비 중 차량 + 정비 메모 ── Fleet 탭의 상태 필터·상세 패널이 빈 화면이 되지 않게
+  const maintenanceVehicle = [...allVehicles].reverse().find((v) => !occupied.has(v.id));
+  if (maintenanceVehicle) {
+    await prisma.vehicle.update({
+      where: { id: maintenanceVehicle.id },
+      data: { status: 'MAINTENANCE' },
+    });
+    await prisma.vehicleMaintenanceNote.createMany({
+      data: [
+        {
+          vehicleId: maintenanceVehicle.id,
+          body: '앞 타이어 편마모 확인 — 정비소 입고 (예상 2일)',
+          authorId: opsAdmin.id,
+          createdAt: hoursAgo(20),
+        },
+        {
+          vehicleId: maintenanceVehicle.id,
+          body: '와이퍼 블레이드 교체 완료',
+          authorId: opsAdmin.id,
+          createdAt: hoursAgo(200),
+        },
+      ],
+    });
+  }
+
   await prisma.seedMeta.upsert({
     where: { id: 1 },
     create: { id: 1, version: SEED_VERSION },
@@ -577,6 +817,10 @@ export async function runSeed(prisma: PrismaClient) {
   const leaseCount = await prisma.leaseContract.count();
   console.log(
     `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}, leases=${leaseCount}, handlerTasks=${taskCount}`,
+  );
+  console.log(
+    `  운영 도메인: telemetry=${allVehicles.length}, finance=${allVehicles.length}, zoneContracts=${allZones.length}` +
+      ` / 경고 케이스: 연료부족 1 · 보험만기 1 · 계약만료 1 · 지연반납 ${lateVehicle ? 1 : 0}`,
   );
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr     개인 이용자');

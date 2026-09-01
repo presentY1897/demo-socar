@@ -46,8 +46,13 @@ describe('핸들러 API (통합)', () => {
         seats: 5,
         zoneId,
         planId,
-        doorLocked: false,
-        engineOn: true,
+      },
+    });
+    // 문 잠금·시동은 M3-1에서 텔레메트리로 이관됐다 — 완료 시 잠기는지 보려면 열린 채로 시작해야 한다
+    await prisma.vehicleTelemetry.create({
+      data: {
+        vehicleId: v.id, fuelPct: 72, odometerKm: 12000,
+        doorLocked: false, engineOn: true, ...ZONE_POS,
       },
     });
     vehicleIds.push(v.id);
@@ -177,8 +182,11 @@ describe('핸들러 API (통합)', () => {
     // 실물 반영: 차는 도착 존에 잠긴 채 서 있다
     const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: task.vehicleId } });
     expect(vehicle.zoneId).toBe(otherZoneId);
-    expect(vehicle.doorLocked).toBe(true);
-    expect(vehicle.engineOn).toBe(false);
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({
+      where: { vehicleId: task.vehicleId },
+    });
+    expect(telemetry.doorLocked).toBe(true);
+    expect(telemetry.engineOn).toBe(false);
 
     // 완료한 작업은 큐에서 빠지고 이력으로 넘어간다
     const queue = (await asHandler(request(server).get('/handler/tasks')).expect(200))
@@ -209,7 +217,10 @@ describe('핸들러 API (통합)', () => {
 
     const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: task.vehicleId } });
     expect(vehicle.zoneId).toBe(zoneId); // 소속 존은 그대로 — 회수가 원래 자리로 되돌린다
-    expect(vehicle.doorLocked).toBe(true); // 이용자가 스마트키로 여는 상태로 인계
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({
+      where: { vehicleId: task.vehicleId },
+    });
+    expect(telemetry.doorLocked).toBe(true); // 이용자가 스마트키로 여는 상태로 인계
   });
 
   it('전이 규칙: 건너뛰기·역행·종착 이후 조작은 409', async () => {

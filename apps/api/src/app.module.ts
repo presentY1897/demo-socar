@@ -11,6 +11,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RentalsModule } from './rentals/rentals.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { TelemetryModule } from './telemetry/telemetry.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { ZonesModule } from './zones/zones.module';
 
@@ -18,6 +19,7 @@ import { ZonesModule } from './zones/zones.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '../../.env'] }),
     PrismaModule,
+    TelemetryModule,
     AuthModule,
     ZonesModule,
     VehiclesModule,

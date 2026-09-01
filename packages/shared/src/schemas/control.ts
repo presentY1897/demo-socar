@@ -33,7 +33,7 @@ export const VEHICLE_CONTROL_META: Record<
   IGNITION_OFF: { label: '시동 끄기', icon: '⏹️', done: '시동을 껐어요' },
 };
 
-/** 차량의 조작 가능 상태 (M3-1에서 VehicleTelemetry로 통합 예정) */
+/** 차량의 조작 가능 상태 — 저장 위치는 VehicleTelemetry (M3-1에서 Vehicle 임시 필드에서 이관) */
 export interface SmartKeyState {
   doorLocked: boolean;
   engineOn: boolean;

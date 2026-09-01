@@ -75,7 +75,7 @@
 
 | 상태 | ID | 작업 | 의존 |
 |---|---|---|---|
-| ☐ | [M3-1](task/m3-1-domain-migration.md) | 도메인 마이그레이션 — Telemetry·ZoneContract·VehicleFinance | M2 |
+| ☑ | [M3-1](task/m3-1-domain-migration.md) | 도메인 마이그레이션 — Telemetry·ZoneContract·VehicleFinance | M2 |
 | ☐ | [M3-2](task/m3-2-telemetry-engine.md) | 텔레메트리 모의 엔진 — 조회 시점 계산 + SSE | M3-1 |
 | ☐ | [M3-3](task/m3-3-ops-api.md) | /ops API — fleet·계약·리스크·문의 답변·회계·경고 | M3-2 |
 | ☐ | [M3-4](task/m3-4-home-fleet-tabs.md) | 운영 홈 + Fleet 탭 UI — 경고 피드·실시간 지도·차량 등록 | M3-3 |

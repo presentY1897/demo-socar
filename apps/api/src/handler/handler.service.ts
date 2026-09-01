@@ -18,6 +18,7 @@ import type { JwtUser } from '../auth/jwt-auth.guard';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
 import { PrismaService } from '../prisma/prisma.service';
 import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../common/travel/travel-time';
+import { TelemetryService } from '../telemetry/telemetry.service';
 import {
   fromPlace,
   HANDLER_TASK_INCLUDE,
@@ -26,6 +27,9 @@ import {
   toPlace,
   type HandlerTaskRow,
 } from './handler-task.mapper';
+
+/** 인계 상태 — 어느 작업이든 차는 잠긴 채 시동이 꺼져서 넘어간다. 다음 사람이 스마트키로 연다 */
+const HANDOVER_STATE = { doorLocked: true, engineOn: false } as const;
 
 /** 완료 이력 조회 범위 — 화면의 "오늘 / 이번 주" 탭이 쓰는 창 */
 const HISTORY_DAYS = 7;
@@ -47,6 +51,7 @@ export class HandlerService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(TRAVEL_ESTIMATOR) private readonly travel: TravelTimeEstimator,
+    private readonly telemetry: TelemetryService,
   ) {}
 
   /**
@@ -157,28 +162,27 @@ export class HandlerService {
         include: { ...HANDLER_TASK_INCLUDE, photos: { orderBy: { createdAt: 'asc' } } },
       });
 
-      await tx.vehicle.update({
-        where: { id: task.vehicleId },
-        data: this.vehicleStateAfter(task),
-      });
+      // 존은 차량이, 문 잠금·시동은 텔레메트리가 갖는다 (M3-1에서 이관)
+      const zoneMove = this.vehicleZoneAfter(task);
+      if (zoneMove) {
+        await tx.vehicle.update({ where: { id: task.vehicleId }, data: { zoneId: zoneMove } });
+      }
+      await this.telemetry.applySmartKey(tx, task.vehicleId, HANDOVER_STATE);
 
       return this.one(updated, { photos: toStoredPhotos(updated.photos) });
     });
   }
 
   /**
-   * 완료 시점의 차량 반영.
+   * 완료 시점의 차량 존 반영 — 옮기지 않는 작업이면 null.
    *
-   * 어느 작업이든 차는 인계 시점에 잠긴 채 시동이 꺼져 있다 — 다음 사람(이용자든 핸들러든)이
-   * 스마트키로 여는 게 정상 흐름이다.
    * 존은 **배달만 예외**로 그대로 둔다: 부름은 수령지에서 이용하고 같은 자리에서 회수해
    * 원래 존으로 돌아오므로(ADR-006 제자리 회수), 배달 때 존을 옮겨 버리면 위치 체인(ADR-005)이
    * 실제와 어긋난다. 차가 존을 떠나 다른 존에 자리 잡는 건 회수·재배치가 끝날 때다.
    */
-  private vehicleStateAfter(task: HandlerTaskRow): Prisma.VehicleUpdateInput {
-    const handedOver = { doorLocked: true, engineOn: false };
-    if (task.type === 'DELIVERY') return handedOver;
-    return { ...handedOver, zone: { connect: { id: task.toZoneId ?? task.fromZoneId } } };
+  private vehicleZoneAfter(task: HandlerTaskRow): string | null {
+    if (task.type === 'DELIVERY') return null;
+    return task.toZoneId ?? task.fromZoneId;
   }
 
   /** 전이 위반은 409 — 자원의 현재 상태와 충돌한 요청이지 잘못된 입력이 아니다 */

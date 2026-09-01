@@ -46,15 +46,17 @@ model User {
   corpGrade     CorpGrade? // 법인 소속만 — 미소속(개인/운영)은 null
   createdAt     DateTime   @default(now())
 
-  corporation      Corporation?      @relation(fields: [corporationId], references: [id])
-  reservations     Reservation[]
-  coupons          Coupon[]
-  creditLedger     CreditLedger[]
-  dispatchRequests DispatchRequest[] @relation("requester")
-  dispatchDecided  DispatchRequest[] @relation("decider")
-  inquiries        Inquiry[]
-  leaseRequests    LeaseContract[]   @relation("leaseRequester")
-  handlerTasks     HandlerTask[]     @relation("assignee") // 핸들러로 배정받은 작업
+  corporation       Corporation?             @relation(fields: [corporationId], references: [id])
+  reservations      Reservation[]
+  coupons           Coupon[]
+  creditLedger      CreditLedger[]
+  dispatchRequests  DispatchRequest[]        @relation("requester")
+  dispatchDecided   DispatchRequest[]        @relation("decider")
+  inquiries         Inquiry[]
+  leaseRequests     LeaseContract[]          @relation("leaseRequester")
+  handlerTasks      HandlerTask[]            @relation("assignee") // 핸들러로 배정받은 작업
+  answeredInquiries Inquiry[]                @relation("inquiryAnswerer") // 백오피스에서 답변한 문의
+  maintenanceNotes  VehicleMaintenanceNote[] @relation("maintenanceAuthor")
 }
 
 model Corporation {
@@ -88,6 +90,7 @@ model Zone {
   onewayReturns    Reservation[] @relation("returnZone") // 이 존으로 반납되는 편도 예약
   handlerTasksFrom HandlerTask[] @relation("taskFromZone")
   handlerTasksTo   HandlerTask[] @relation("taskToZone")
+  contract         ZoneContract?
 }
 
 model PricingPlan {
@@ -126,11 +129,6 @@ model Vehicle {
   planId        String
   corporationId String? // 값이 있으면 법인 전용 차량 (= 리스 계약 차량) — 이용 과금 없음
 
-  // 가상 스마트키(M1-4) 조작 결과를 담는 임시 상태 필드.
-  // ⚠️ M3-1에서 VehicleTelemetry(연료·주행거리·좌표 포함)로 통합 예정 — 그때 이 두 필드는 제거된다.
-  doorLocked Boolean @default(true)
-  engineOn   Boolean @default(false)
-
   zone               Zone                @relation(fields: [zoneId], references: [id])
   plan               PricingPlan         @relation(fields: [planId], references: [id])
   corporation        Corporation?        @relation(fields: [corporationId], references: [id])
@@ -140,6 +138,95 @@ model Vehicle {
   inquiries          Inquiry[]
   leaseContracts     LeaseContract[]
   handlerTasks       HandlerTask[]
+
+  // 센서 상태(문 잠금·시동 포함)는 VehicleTelemetry 한 곳에서 본다 — M1-1의 임시 필드는 M3-1에서 이관됐다
+  telemetry        VehicleTelemetry?
+  finance          VehicleFinance?
+  maintenanceNotes VehicleMaintenanceNote[]
+}
+
+// ─────────────── 운영 도메인: 텔레메트리 · 도입/보험 · 존 계약 (M3-1) ───────────────
+
+/// 차량 센서 상태 1:1 (M3-1).
+///
+/// 저장값은 "마지막으로 확정한 시점의 값"이고, 조회 시점의 현재값은 여기서부터
+/// 경과 시간으로 계산한다 — 백그라운드 워커 없이 모의 텔레메트리를 굴리는 방식(§6-Q4).
+/// 계산·write-through 규칙은 `apps/api/src/telemetry/`(M3-2)가 유일한 근거다.
+///
+/// M1-4가 Vehicle에 임시로 두었던 doorLocked/engineOn이 여기로 이관됐다 —
+/// 스마트키 조작 결과도 결국 "차가 지금 어떤 상태인가"라서 센서 상태와 같은 자리에 있어야 한다.
+model VehicleTelemetry {
+  vehicleId  String   @id
+  /// 내연: 연료 잔량 % · EV: 배터리 잔량 % (0~100)
+  fuelPct    Float
+  odometerKm Float
+  doorLocked Boolean  @default(true)
+  engineOn   Boolean  @default(false)
+  /// 마지막으로 확정된 위치 — 운행 중이면 여기서부터 보간한다
+  lat        Float
+  lng        Float
+  /// 계산의 기준 시각 (= 저장값이 확정된 시점)
+  updatedAt  DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([fuelPct]) // 연료 부족 경고 피드
+}
+
+enum AcquisitionType {
+  PURCHASE // 매입
+  LEASE // MOCAR가 빌려 쓰는 차 (법인에 빌려주는 LeaseContract와 반대 방향)
+}
+
+/// 차량 1대의 도입 원가와 보험 (M3-1) — **MOCAR가 쓴 돈** 관점.
+/// 법인에게 받는 돈(LeaseContract)과 방향이 반대다: 회계 탭에서 전자는 비용, 후자는 매출.
+model VehicleFinance {
+  vehicleId           String          @id
+  acquisitionType     AcquisitionType
+  /// PURCHASE일 때의 취득가
+  acquisitionCostKrw  Int?
+  /// LEASE일 때의 월 리스료 (회계 탭의 월 비용)
+  monthlyLeaseKrw     Int?
+  acquiredAt          DateTime
+  insurerName         String
+  /// 월 보험료 — 회계 탭 비용 합산에 매달 그대로 들어간다
+  insurancePremiumKrw Int
+  insuranceExpiresAt  DateTime
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([insuranceExpiresAt]) // 보험 만기 임박 경고 피드
+}
+
+/// 존(주차장) 계약 1:1 (M3-1).
+/// 잔여 자리는 계약이 아니라 `Zone.capacity − 현재 배정 차량 수`로 계산한다 — 자리 수는 존의 속성이다.
+model ZoneContract {
+  zoneId        String    @id
+  /// 무료 존(공영·제휴 무상)이면 false — 이때 monthlyFeeKrw는 0
+  isPaid        Boolean   @default(false)
+  partnerName   String?
+  monthlyFeeKrw Int       @default(0)
+  contractStart DateTime?
+  contractEnd   DateTime?
+
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([contractEnd]) // 계약 만료 임박 경고 피드
+}
+
+/// 정비 메모 — Fleet 상세(M3-4)에서 운영자가 남기는 기록.
+/// 단일 필드로 덮어쓰지 않고 이력으로 쌓는다: "언제 무엇을 봤는지"가 정비의 실질이라서.
+model VehicleMaintenanceNote {
+  id        String   @id @default(cuid())
+  vehicleId String
+  body      String
+  authorId  String?
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  author  User?   @relation("maintenanceAuthor", fields: [authorId], references: [id])
+
+  @@index([vehicleId, createdAt])
 }
 
 // ─────────────────────────── 예약 / 대여 ───────────────────────────
@@ -158,13 +245,13 @@ enum InsuranceTier {
 }
 
 model Reservation {
-  id        String            @id @default(cuid())
-  userId    String
-  vehicleId String
-  startAt   DateTime          @db.Timestamptz(3)
-  endAt     DateTime          @db.Timestamptz(3)
-  status    ReservationStatus @default(CONFIRMED)
-  insurance InsuranceTier
+  id           String            @id @default(cuid())
+  userId       String
+  vehicleId    String
+  startAt      DateTime          @db.Timestamptz(3)
+  endAt        DateTime          @db.Timestamptz(3)
+  status       ReservationStatus @default(CONFIRMED)
+  insurance    InsuranceTier
   returnZoneId String? // 편도 예약: 반납 존 (null = 왕복)
 
   // 부름(탁송) 수령: 지정 위치로 배달, 이용 후 같은 자리 회수 (편도와 배타)
@@ -298,20 +385,23 @@ enum InquiryStatus {
 }
 
 model Inquiry {
-  id         String          @id @default(cuid())
-  userId     String
-  vehicleId  String? // 차량 문의인 경우
-  rentalId   String? // 이용 중 문의인 경우
-  category   InquiryCategory
-  body       String
-  status     InquiryStatus   @default(OPEN)
-  answer     String?
-  answeredAt DateTime?
-  createdAt  DateTime        @default(now())
+  id           String          @id @default(cuid())
+  userId       String
+  vehicleId    String? // 차량 문의인 경우
+  rentalId     String? // 이용 중 문의인 경우
+  category     InquiryCategory
+  body         String
+  status       InquiryStatus   @default(OPEN)
+  answer       String?
+  answeredAt   DateTime?
+  // 누가 답변했는지 — 문의함(M3-5)에서 담당자를 함께 보여준다
+  answeredById String?
+  createdAt    DateTime        @default(now())
 
-  user    User     @relation(fields: [userId], references: [id])
-  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
-  rental  Rental?  @relation(fields: [rentalId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+  vehicle    Vehicle? @relation(fields: [vehicleId], references: [id])
+  rental     Rental?  @relation(fields: [rentalId], references: [id])
+  answeredBy User?    @relation("inquiryAnswerer", fields: [answeredById], references: [id])
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -426,16 +516,16 @@ enum DispatchStatus {
 }
 
 model DispatchRequest {
-  id            String         @id @default(cuid())
-  corporationId String
-  requesterId   String
-  purpose       String // 예: "거래처 미팅 (판교)"
-  originLabel   String // 출발지 표기 (보통 오피스)
-  originLat     Float
-  originLng     Float
+  id             String         @id @default(cuid())
+  corporationId  String
+  requesterId    String
+  purpose        String // 예: "거래처 미팅 (판교)"
+  originLabel    String // 출발지 표기 (보통 오피스)
+  originLat      Float
+  originLng      Float
   desiredStartAt DateTime
   desiredEndAt   DateTime
-  status        DispatchStatus @default(REQUESTED)
+  status         DispatchStatus @default(REQUESTED)
 
   reservationId String?   @unique // 승인 시 생성된 예약
   decidedById   String?

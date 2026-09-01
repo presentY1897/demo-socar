@@ -203,7 +203,7 @@ export const conditionReportSchema = z.object({
 });
 export type ConditionReportRes = z.infer<typeof conditionReportSchema>;
 
-/** 가상 스마트키가 보여주는 차량 상태 (M3-1에서 텔레메트리로 통합 예정) */
+/** 가상 스마트키가 보여주는 차량 상태 — 출처는 VehicleTelemetry (M3-1 이관 완료) */
 export const smartKeyStateSchema = z.object({
   doorLocked: z.boolean(),
   engineOn: z.boolean(),

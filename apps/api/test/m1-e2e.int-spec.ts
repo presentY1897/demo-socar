@@ -246,8 +246,9 @@ describe('M1 이용 플로우 E2E (통합) — 한 예약의 전 생애', () => 
     expect(blocked.body.message).toContain('체크인');
 
     expect(await controlActions()).toEqual([]);
-    const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
-    expect(vehicle).toMatchObject({ doorLocked: true, engineOn: false });
+    // 문 잠금·시동은 M3-1에서 Vehicle → VehicleTelemetry로 이관됐다
+    const telemetry = await prisma.vehicleTelemetry.findUniqueOrThrow({ where: { vehicleId } });
+    expect(telemetry).toMatchObject({ doorLocked: true, engineOn: false });
   });
 
   it('⑤ 체크인(사진 2장 + 상태 메모)을 마치면 스마트키가 열린다', async () => {
