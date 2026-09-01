@@ -23,7 +23,6 @@ import { ZonesModule } from './zones/zones.module';
     ReservationsModule,
     RentalsModule,
     PaymentsModule,
-    DispatchModule,
     InquiriesModule,
     BizModule,
     OpsModule,

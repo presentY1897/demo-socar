@@ -81,8 +81,6 @@ const reservationsById = Object.fromEntries(
   ]),
 );
 
-const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
-const DEMO_ACCOUNTS = [userPersonal, userCorpMember, userCorpAdmin, userOpsAdmin];
 const DEMO_ACCOUNTS = [
   userPersonal,
   userCorpViewer,
