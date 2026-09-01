@@ -1,11 +1,18 @@
 import {
   authUserSchema,
+  conditionReportSchema,
   couponSchema,
+  paymentSchema,
   pricingPlanSchema,
+  rentalSchema,
+  rentalUsageSchema,
   reservationSchema,
   vehicleSummarySchema,
   zoneDetailSchema,
   zoneMarkerSchema,
+  type ConditionReportRes,
+  type RentalUsageRes,
+  type ReservationRes,
   type ZoneDetailRes,
   type ZoneMarkerRes,
 } from '@socar/shared';
@@ -172,4 +179,108 @@ export const reservationConfirmed = make(reservationSchema, {
   vehicle: { ...vehicleAvante, zone: zoneGangnam },
   returnZone: null,
   rental: null,
+  payments: [
+    {
+      id: 'pay-upfront',
+      reservationId: 'resv-1',
+      kind: 'UPFRONT',
+      amountKrw: 22400,
+      status: 'CAPTURED',
+      cardLast4: '4242',
+      approvedAt: '2030-01-01T00:00:01.000Z',
+      createdAt: '2030-01-01T00:00:00.000Z',
+    },
+  ],
+});
+
+// ─────────────────────────── 결제 / 대여 ───────────────────────────
+
+export const paymentUpfront = make(paymentSchema, {
+  id: 'pay-upfront',
+  reservationId: 'resv-1',
+  kind: 'UPFRONT',
+  amountKrw: 22400,
+  status: 'CAPTURED',
+  cardLast4: '4242',
+  approvedAt: '2030-01-01T00:00:01.000Z',
+  createdAt: '2030-01-01T00:00:00.000Z',
+});
+
+export const rentalInUse = make(rentalSchema, {
+  id: 'rental-1',
+  reservationId: 'resv-2',
+  status: 'IN_USE',
+  startedAt: '2030-01-02T01:00:30.000Z',
+  returnedAt: null,
+  distanceKm: null,
+  lateMinutes: 0,
+  driveFeeKrw: null,
+  lateFeeKrw: null,
+});
+
+export const rentalCompleted = make(rentalSchema, {
+  ...rentalInUse,
+  status: 'COMPLETED',
+  returnedAt: '2030-01-02T02:50:00.000Z',
+  distanceKm: 31.4,
+  driveFeeKrw: 252,
+  lateFeeKrw: 0,
+});
+
+/** 이용 중 예약 — 단계형 화면(체크인→반납)이 도는 기본 상태 */
+export const reservationInUse: ReservationRes = make(reservationSchema, {
+  ...reservationConfirmed,
+  id: 'resv-2',
+  status: 'IN_USE',
+  payments: [{ ...paymentUpfront, id: 'pay-upfront-2', reservationId: 'resv-2' }],
+  rental: rentalInUse,
+});
+
+// ─────────────────────── 이용 플로우 (체크인/아웃) ───────────────────────
+
+/** 1×1 투명 JPEG 자리를 대신하는 짧은 base64 (내용은 검증하지 않는다) */
+const PHOTO_DATA = Buffer.from('mocar-demo-photo').toString('base64');
+const storedPhoto = (id: string) => ({
+  id,
+  mime: 'image/jpeg',
+  bytes: 150_000,
+  dataUri: `data:image/jpeg;base64,${PHOTO_DATA}`,
+});
+
+export const conditionCheckIn: ConditionReportRes = make(conditionReportSchema, {
+  id: 'report-check-in',
+  rentalId: rentalInUse.id,
+  phase: 'CHECK_IN',
+  notes: '앞범퍼 우측 하단 기존 흠집',
+  parkingNote: null,
+  createdAt: '2030-01-02T01:01:00.000Z',
+  photos: [storedPhoto('photo-in-1')],
+});
+
+export const conditionCheckOut: ConditionReportRes = make(conditionReportSchema, {
+  id: 'report-check-out',
+  rentalId: rentalInUse.id,
+  phase: 'CHECK_OUT',
+  notes: null,
+  parkingNote: '지하 2층 B-14',
+  createdAt: '2030-01-02T02:45:00.000Z',
+  photos: [storedPhoto('photo-out-1')],
+});
+
+/** 체크인/아웃 전 기본 상태 */
+export const usageEmpty: RentalUsageRes = make(rentalUsageSchema, {
+  rentalId: rentalInUse.id,
+  checkIn: null,
+  checkOut: null,
+});
+
+export const usageCheckedIn: RentalUsageRes = make(rentalUsageSchema, {
+  ...usageEmpty,
+  checkIn: conditionCheckIn,
+});
+
+export const usageCheckedOut: RentalUsageRes = make(rentalUsageSchema, {
+  ...usageEmpty,
+  checkIn: conditionCheckIn,
+  checkOut: conditionCheckOut,
 });

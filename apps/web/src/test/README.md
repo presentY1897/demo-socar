@@ -21,7 +21,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `msw/handlers.ts` | 기본 핸들러 (존·차량·인증·예약). 전 테스트 공통 상태 |
 | `msw/fixtures.ts` | 목 데이터. **shared 응답 스키마로 `parse`** 해서 만든다 |
 | `msw/server.ts` | `setupServer` 인스턴스 |
-| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터·SWR 캐시 주입, `MOCK_USERS` |
+| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터·SWR 캐시 주입, `MOCK_USERS`, `routeParams` |
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 
 ## 쓰는 법
@@ -67,6 +67,17 @@ server.use(
 );
 // ...인터랙션 후
 expect(body).toMatchObject({ insurance: 'FULL', useCredit: true });
+```
+
+### 동적 라우트 페이지(`params`)
+
+Next 15의 `params`는 Promise다. 페이지가 `use(params)`로 푸는데 jsdom에서는 서스펜스 재개가
+흐르지 않아 화면이 fallback에 멈춘다 — `routeParams()`로 감싸서 넘긴다.
+
+```tsx
+renderWithProviders(<ReservationDetailPage params={routeParams({ id: 'resv-2' })} />, {
+  user: MOCK_USERS.personal,
+});
 ```
 
 ## 사진 첨부(PhotoCapture)

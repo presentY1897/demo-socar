@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { conditionPhaseSchema } from './condition';
+import { storedPhotoSchema } from './photo';
 import { insuranceTierSchema } from './reservation';
 
 /**
@@ -14,6 +16,14 @@ export const vehicleStatusSchema = z.enum(['AVAILABLE', 'MAINTENANCE']);
 export const reservationStatusSchema = z.enum(['CONFIRMED', 'IN_USE', 'COMPLETED', 'CANCELED']);
 export const rentalStatusSchema = z.enum(['IN_USE', 'RETURN_PENDING', 'COMPLETED']);
 export const roleSchema = z.enum(['USER', 'CORP_MEMBER', 'CORP_ADMIN', 'OPS_ADMIN']);
+export const paymentKindSchema = z.enum(['UPFRONT', 'DRIVE_SETTLEMENT', 'PENALTY']);
+export const paymentStatusSchema = z.enum([
+  'PENDING',
+  'AUTHORIZED',
+  'CAPTURED',
+  'FAILED',
+  'REFUNDED',
+]);
 
 // ─────────────────────────── 존 ───────────────────────────
 
@@ -118,6 +128,18 @@ export const rentalSchema = z.object({
   lateFeeKrw: z.number().int().nullable(),
 });
 
+/** `GET /reservations/:id` 의 결제 이력 원소 */
+export const paymentSchema = z.object({
+  id: z.string(),
+  reservationId: z.string(),
+  kind: paymentKindSchema,
+  amountKrw: z.number().int(),
+  status: paymentStatusSchema,
+  cardLast4: z.string().nullable(),
+  approvedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
 /** `GET /reservations/mine` 의 원소 · `GET /reservations/:id` 의 본문 */
 export const reservationSchema = z.object({
   id: z.string(),
@@ -145,8 +167,35 @@ export const reservationSchema = z.object({
   }),
   returnZone: zoneMarkerSchema.omit({ vehicleCount: true }).nullable().optional(),
   rental: rentalSchema.nullable().optional(),
+  /** 상세에만 실린다 (목록은 결제 이력을 싣지 않는다) */
+  payments: z.array(paymentSchema).optional(),
 });
 export type ReservationRes = z.infer<typeof reservationSchema>;
+
+// ─────────────────── 이용 플로우 (체크인/아웃) ───────────────────
+
+/** 제출된 차량 상태 보고 — 사진은 `<img src>`에 바로 물리는 data: URI로 내려온다 */
+export const conditionReportSchema = z.object({
+  id: z.string(),
+  rentalId: z.string(),
+  phase: conditionPhaseSchema,
+  notes: z.string().nullable(),
+  parkingNote: z.string().nullable(),
+  createdAt: z.string(),
+  photos: z.array(storedPhotoSchema),
+});
+export type ConditionReportRes = z.infer<typeof conditionReportSchema>;
+
+/**
+ * `GET /rentals/:id/usage` — 단계형 화면이 "지금 어느 단계인가"를 판단하는 단일 소스.
+ * 단계별로 최신 보고 1건만 유효 보고로 본다 (m1-3 문서의 재제출 정책 참고).
+ */
+export const rentalUsageSchema = z.object({
+  rentalId: z.string(),
+  checkIn: conditionReportSchema.nullable(),
+  checkOut: conditionReportSchema.nullable(),
+});
+export type RentalUsageRes = z.infer<typeof rentalUsageSchema>;
 
 // ─────────────────────────── 계정 / 혜택 ───────────────────────────
 

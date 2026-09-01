@@ -53,7 +53,7 @@
 |---|---|---|---|
 | ☑ | [M1-1](task/m1-1-domain-migration.md) | 도메인 마이그레이션 — ConditionReport·ControlLog·Inquiry·Incident 등 | — |
 | ☑ | [M1-2](task/m1-2-photo-pipeline.md) | 사진 업로드 파이프라인 — PhotoCapture 압축→DB 저장 공통 경로 | M0-2, M1-1 |
-| ☐ | [M1-3](task/m1-3-checkin-checkout.md) | 체크인/체크아웃 API + 예약 상세 단계형 UI | M1-2 |
+| ☑ | [M1-3](task/m1-3-checkin-checkout.md) | 체크인/체크아웃 API + 예약 상세 단계형 UI | M1-2 |
 | ☐ | [M1-4](task/m1-4-smart-key.md) | 가상 스마트키 — 문열림/잠금/비상등/경적 + 시동(확정) | M1-3 |
 | ☐ | [M1-5](task/m1-5-return-zone-change.md) | 예약 변경 시 반납존 변경 — 차액 정산 + 위치 체인 재검증 | M1-1 |
 | ☐ | [M1-6](task/m1-6-vehicle-manual.md) | 차종별 매뉴얼 — 모의 콘텐츠·API·페이지 | M1-1 |

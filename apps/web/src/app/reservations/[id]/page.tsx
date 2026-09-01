@@ -4,10 +4,12 @@ import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
+import type { RentalUsageRes } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/lib/format';
 import { fromParts, TIMES_10MIN, toDatePart, toTimePart } from '@/lib/timerange';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
+import { ConditionReportForm, ConditionReportSummary } from '@/components/ConditionReportForm';
 
 interface Detail {
   id: string;
@@ -63,12 +65,21 @@ const PAYMENT_STATUS_LABEL: Record<string, string> = {
   FAILED: '실패',
 };
 
+type StepState = 'todo' | 'current' | 'done';
+
 export default function ReservationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { data, mutate } = useSWR<Detail>(`/reservations/${id}`, swrFetcher, {
     refreshInterval: 10000,
   });
+  // 이용 단계(체크인/아웃)는 대여가 생긴 뒤에만 의미가 있다
+  const rentalId = data?.rental?.id ?? null;
+  const { data: usage, mutate: mutateUsage } = useSWR<RentalUsageRes>(
+    rentalId ? `/rentals/${rentalId}/usage` : null,
+    swrFetcher,
+  );
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModify, setShowModify] = useState(false);
@@ -81,7 +92,7 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
     setError(null);
     try {
       await fn();
-      await mutate();
+      await Promise.all([mutate(), mutateUsage()]);
       setShowModify(false);
       setShowExtend(false);
     } catch (e) {
@@ -91,6 +102,12 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
     }
   }
 
+  /** 폼이 스스로 에러를 보여주도록 실패를 그대로 던진다 */
+  async function submitReport(path: string, body: unknown) {
+    await api(path, { method: 'POST', body });
+    await Promise.all([mutate(), mutateUsage()]);
+  }
+
   if (!data) return <p className="py-16 text-center text-sm text-gray-400">불러오는 중...</p>;
 
   const canStart =
@@ -98,6 +115,11 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
     dayjs().isAfter(dayjs(data.startAt).subtract(10, 'minute')) &&
     dayjs().isBefore(dayjs(data.endAt));
   const beforeStart = data.status === 'CONFIRMED' && dayjs().isBefore(dayjs(data.startAt));
+
+  const rental = data.rental;
+  const checkIn = usage?.checkIn ?? null;
+  const checkOut = usage?.checkOut ?? null;
+  const driving = rental?.status === 'IN_USE';
 
   return (
     <div className="mx-auto max-w-lg px-4 py-4">
@@ -134,86 +156,155 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
         </p>
       </div>
 
-      {/* 이용 중 카드 */}
-      {data.status === 'IN_USE' && data.rental && (
-        <div className="mt-4 rounded-xl border-2 border-green-300 bg-green-50 p-4">
-          <p className="font-semibold text-green-800">🚗 이용 중</p>
-          <p className="mt-1 text-sm text-green-700">
-            {fmtDateTime(data.rental.startedAt)}에 시작 · 반납 예정 {fmtDateTime(data.endAt)}
-          </p>
+      {/* 이용 단계 — 대여가 시작되면 체크인 → 스마트키 → 이용 → 체크아웃 → 반납 순서로 진행된다 */}
+      {rental && (
+        <div className="mt-4 space-y-2">
+          <Step
+            n={1}
+            title="체크인 — 차량 상태 촬영"
+            state={checkIn ? 'done' : 'current'}
+            summary={checkIn ? `사진 ${checkIn.photos.length}장` : '스마트키를 열려면 먼저 제출하세요'}
+          >
+            {checkIn ? (
+              <ConditionReportSummary report={checkIn} />
+            ) : (
+              <ConditionReportForm
+                phase="CHECK_IN"
+                onSubmit={(dto) => submitReport(`/rentals/${rental.id}/check-in`, dto)}
+              />
+            )}
+          </Step>
 
-          {data.rental.status === 'IN_USE' && (
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => {
-                  setExtendEnd(dayjs(data.endAt).add(30, 'minute').toISOString());
-                  setShowExtend((v) => !v);
-                }}
-                className="flex-1 rounded-lg border border-green-500 bg-white py-2.5 text-sm font-semibold text-green-700"
-              >
-                반납 연장
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => act(() => api(`/rentals/${data.rental!.id}/return`, { method: 'POST' }))}
-                className="flex-1 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                {busy ? '정산 중...' : '반납하기'}
-              </button>
-            </div>
-          )}
-          {data.rental.status === 'IN_USE' && (
-            <p className="mt-2 text-[11px] text-green-700/70">
-              존에 주차하고 차 문을 잠근 뒤 반납하기를 누르세요. 주행거리와 요금은 자동 정산돼요
+          <Step
+            n={2}
+            title="스마트키 · 차량 매뉴얼"
+            state={checkOut ? 'done' : checkIn ? 'current' : 'todo'}
+            summary={checkIn ? undefined : '체크인 후 사용할 수 있어요'}
+          >
+            {/* M1-4: 스마트키 패널 자리 · M1-6: 차종별 매뉴얼 링크 자리 */}
+            <p className="text-xs text-gray-400">
+              체크인을 마치면 스마트키로 문을 열고 시동을 걸 수 있어요
             </p>
-          )}
+          </Step>
 
-          {showExtend && extendEnd && (
-            <div className="mt-3 rounded-lg bg-white p-3">
-              <p className="text-sm font-medium">새 반납 시각</p>
-              <div className="mt-2 flex gap-1.5">
-                <input
-                  type="date"
-                  value={toDatePart(extendEnd)}
-                  onChange={(e) => setExtendEnd(fromParts(e.target.value, toTimePart(extendEnd)))}
-                  className="flex-1 rounded-md border border-gray-300 px-1.5 py-1 text-xs"
-                />
-                <select
-                  value={toTimePart(extendEnd)}
-                  onChange={(e) => setExtendEnd(fromParts(toDatePart(extendEnd), e.target.value))}
-                  className="rounded-md border border-gray-300 px-1 py-1 text-xs tabular-nums"
+          <Step
+            n={3}
+            title="이용 중"
+            state={driving ? (checkIn ? 'current' : 'todo') : 'done'}
+            summary={`반납 예정 ${fmtDateTime(data.endAt)}`}
+          >
+            <p className="text-sm text-gray-600">
+              {fmtDateTime(rental.startedAt)}에 시작했어요
+            </p>
+            {driving && (
+              <>
+                <button
+                  onClick={() => {
+                    setExtendEnd(dayjs(data.endAt).add(30, 'minute').toISOString());
+                    setShowExtend((v) => !v);
+                  }}
+                  className="mt-2 w-full rounded-lg border border-sky-300 bg-white py-2 text-sm font-semibold text-sky-600"
                 >
-                  {TIMES_10MIN.map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
+                  반납 연장
+                </button>
+                {showExtend && extendEnd && (
+                  <div className="mt-2 rounded-lg bg-gray-50 p-3">
+                    <p className="text-sm font-medium">새 반납 시각</p>
+                    <div className="mt-2 flex gap-1.5">
+                      <input
+                        type="date"
+                        aria-label="연장 날짜"
+                        value={toDatePart(extendEnd)}
+                        onChange={(e) => setExtendEnd(fromParts(e.target.value, toTimePart(extendEnd)))}
+                        className="flex-1 rounded-md border border-gray-300 px-1.5 py-1 text-xs"
+                      />
+                      <select
+                        aria-label="연장 시각"
+                        value={toTimePart(extendEnd)}
+                        onChange={(e) => setExtendEnd(fromParts(toDatePart(extendEnd), e.target.value))}
+                        className="rounded-md border border-gray-300 px-1 py-1 text-xs tabular-nums"
+                      >
+                        {TIMES_10MIN.map((t) => (
+                          <option key={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        act(() =>
+                          api(`/rentals/${rental.id}/extend`, {
+                            method: 'POST',
+                            body: { endAt: extendEnd, idempotencyKey: crypto.randomUUID() },
+                          }),
+                        )
+                      }
+                      className="mt-2 w-full rounded-lg bg-sky-500 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                    >
+                      연장하기 (연장분 요금 결제)
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </Step>
+
+          <Step
+            n={4}
+            title="체크아웃 — 주차 위치 촬영"
+            state={checkOut ? 'done' : checkIn ? 'current' : 'todo'}
+            summary={checkOut ? (checkOut.parkingNote ?? undefined) : '반납하려면 먼저 제출하세요'}
+          >
+            {checkOut ? (
+              <ConditionReportSummary report={checkOut} />
+            ) : (
+              <ConditionReportForm
+                phase="CHECK_OUT"
+                onSubmit={(dto) => submitReport(`/rentals/${rental.id}/check-out`, dto)}
+              />
+            )}
+          </Step>
+
+          <Step
+            n={5}
+            title="반납 · 정산"
+            state={rental.status === 'COMPLETED' ? 'done' : checkOut ? 'current' : 'todo'}
+            summary={
+              rental.status === 'COMPLETED'
+                ? `주행 ${rental.distanceKm ?? 0}km`
+                : '체크아웃 후 반납할 수 있어요'
+            }
+          >
+            {driving && (
+              <>
+                <button
+                  disabled={busy}
+                  onClick={() => act(() => api(`/rentals/${rental.id}/return`, { method: 'POST' }))}
+                  className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {busy ? '정산 중...' : '반납하기'}
+                </button>
+                <p className="mt-2 text-[11px] text-gray-400">
+                  주행거리와 요금은 반납 즉시 자동 정산돼요
+                </p>
+              </>
+            )}
+            {rental.status === 'RETURN_PENDING' && (
               <button
                 disabled={busy}
-                onClick={() =>
-                  act(() =>
-                    api(`/rentals/${data.rental!.id}/extend`, {
-                      method: 'POST',
-                      body: { endAt: extendEnd, idempotencyKey: crypto.randomUUID() },
-                    }),
-                  )
-                }
-                className="mt-2 w-full rounded-lg bg-green-600 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                onClick={() => act(() => api(`/rentals/${rental.id}/settle`, { method: 'POST' }))}
+                className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-white"
               >
-                연장하기 (연장분 요금 결제)
+                정산 재시도
               </button>
-            </div>
-          )}
-
-          {data.rental.status === 'RETURN_PENDING' && (
-            <button
-              disabled={busy}
-              onClick={() => act(() => api(`/rentals/${data.rental!.id}/settle`, { method: 'POST' }))}
-              className="mt-3 w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-white"
-            >
-              정산 재시도
-            </button>
-          )}
+            )}
+            {rental.status === 'COMPLETED' && (
+              <p className="text-sm text-gray-600">
+                {rental.returnedAt ? `${fmtDateTime(rental.returnedAt)}에 반납 완료` : '반납 완료'}
+                {rental.lateMinutes > 0 && ` · ${rental.lateMinutes}분 지연`}
+              </p>
+            )}
+          </Step>
         </div>
       )}
 
@@ -226,7 +317,7 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
               onClick={() => act(() => api('/rentals/start', { method: 'POST', body: { reservationId: data.id } }))}
               className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-white disabled:opacity-40"
             >
-              🔓 스마트키 — 이용 시작
+              🚗 이용 시작 — 체크인으로
             </button>
           )}
           {beforeStart && (
@@ -280,7 +371,7 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
         </div>
       )}
       {data.status === 'CONFIRMED' && !canStart && (
-        <p className="mt-3 text-center text-xs text-gray-400">예약 시작 10분 전부터 스마트키를 쓸 수 있어요</p>
+        <p className="mt-3 text-center text-xs text-gray-400">예약 시작 10분 전부터 이용할 수 있어요</p>
       )}
 
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
@@ -335,6 +426,57 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 단계 카드 — 현재 단계는 펼쳐서 강조하고, 끝난 단계는 접어서 요약만 남긴다.
+ * 접힌 단계도 눌러서 다시 펼칠 수 있다 (제출한 사진을 다시 보려는 경우).
+ */
+function Step({
+  n,
+  title,
+  state,
+  summary,
+  children,
+}: {
+  n: number;
+  title: string;
+  state: StepState;
+  summary?: string;
+  children: React.ReactNode;
+}) {
+  const [manual, setManual] = useState<boolean | null>(null);
+  const expanded = state !== 'todo' && (manual ?? state === 'current');
+
+  return (
+    <section
+      data-testid={`step-${n}`}
+      data-state={state}
+      className={`rounded-xl bg-white p-4 shadow-sm ${
+        state === 'current' ? 'ring-2 ring-sky-400' : state === 'todo' ? 'opacity-50' : ''
+      }`}
+    >
+      <button
+        type="button"
+        disabled={state === 'todo'}
+        onClick={() => setManual(!expanded)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+            state === 'done' ? 'bg-green-100 text-green-700' : 'bg-sky-100 text-sky-700'
+          }`}
+        >
+          {state === 'done' ? '✓' : n}
+        </span>
+        <span className="flex-1">
+          <span className="text-sm font-semibold">{title}</span>
+          {summary && <span className="ml-2 text-xs text-gray-400">{summary}</span>}
+        </span>
+      </button>
+      {expanded && <div className="mt-3">{children}</div>}
+    </section>
   );
 }
 

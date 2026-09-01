@@ -1,10 +1,13 @@
 import { http, HttpResponse } from 'msw';
 import {
   availabilitySchema,
+  conditionReportSchema,
   creditSchema,
   loginResponseSchema,
   quoteBreakdownSchema,
   quote,
+  rentalSchema,
+  rentalUsageSchema,
   reservationSchema,
   vehicleDetailSchema,
   zoneDetailSchema,
@@ -12,8 +15,14 @@ import {
   type QuoteRequestDto,
 } from '@socar/shared';
 import {
+  conditionCheckIn,
+  conditionCheckOut,
   couponWelcome,
+  rentalCompleted,
+  rentalInUse,
   reservationConfirmed,
+  reservationInUse,
+  usageEmpty,
   userCorpAdmin,
   userOpsAdmin,
   userPersonal,
@@ -36,6 +45,10 @@ const vehiclesById = Object.fromEntries(
 );
 
 const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
+
+const reservationsById = Object.fromEntries(
+  [reservationConfirmed, reservationInUse].map((r) => [r.id, r]),
+);
 
 /**
  * 기본 핸들러 — 대부분의 화면이 이 상태에서 렌더된다.
@@ -107,13 +120,30 @@ export const handlers = [
   ),
 
   http.get(url('/reservations/:id'), ({ params }) => {
-    if (params.id !== reservationConfirmed.id) {
-      return HttpResponse.json({ message: '예약을 찾을 수 없습니다' }, { status: 404 });
-    }
-    return json(reservationSchema, reservationConfirmed);
+    const resv = reservationsById[String(params.id)];
+    if (!resv) return HttpResponse.json({ message: '예약을 찾을 수 없습니다' }, { status: 404 });
+    return json(reservationSchema, resv);
   }),
 
   http.post(url('/reservations'), () => json(reservationSchema, reservationConfirmed, 201)),
+
+  // ── 이용 플로우 (체크인/아웃·반납) ──────────────
+  // 기본값은 "이용 시작 직후" — 단계 진행이 필요한 테스트는 server.use로 상태를 갈아끼운다.
+  http.get(url('/rentals/:id/usage'), () => json(rentalUsageSchema, usageEmpty)),
+
+  http.post(url('/rentals/start'), () => json(rentalSchema, rentalInUse, 201)),
+
+  http.post(url('/rentals/:id/check-in'), () => json(conditionReportSchema, conditionCheckIn, 201)),
+
+  http.post(url('/rentals/:id/check-out'), () =>
+    json(conditionReportSchema, conditionCheckOut, 201),
+  ),
+
+  http.post(url('/rentals/:id/return'), () => json(rentalSchema, rentalCompleted, 201)),
+
+  http.post(url('/rentals/:id/extend'), () => json(rentalSchema, rentalInUse, 201)),
+
+  http.post(url('/rentals/:id/settle'), () => json(rentalSchema, rentalCompleted, 201)),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

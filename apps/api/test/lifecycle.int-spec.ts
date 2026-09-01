@@ -69,6 +69,8 @@ describe('라이프사이클 (통합) — 연장/편도/변경', () => {
   });
 
   afterAll(async () => {
+    await prisma.conditionPhoto.deleteMany({ where: { report: { rental: { reservation: { vehicleId } } } } });
+    await prisma.conditionReport.deleteMany({ where: { rental: { reservation: { vehicleId } } } });
     await prisma.payment.deleteMany({ where: { reservation: { vehicleId } } });
     await prisma.rental.deleteMany({ where: { reservation: { vehicleId } } });
     await prisma.reservation.deleteMany({ where: { vehicleId } });
@@ -81,6 +83,17 @@ describe('라이프사이클 (통합) — 연장/편도/변경', () => {
   });
 
   const auth = (r: request.Test) => r.set('Authorization', `Bearer ${token}`);
+
+  /** M1-3부터 반납은 체크인/체크아웃을 마쳐야 열린다 */
+  const completeChecks = async (rentalId: string) => {
+    const photos = [{ mime: 'image/jpeg', data: Buffer.alloc(300, 1).toString('base64') }];
+    await auth(request(app.getHttpServer()).post(`/rentals/${rentalId}/check-in`))
+      .send({ photos })
+      .expect(201);
+    await auth(request(app.getHttpServer()).post(`/rentals/${rentalId}/check-out`))
+      .send({ parkingNote: '지하 1층 A-3', photos })
+      .expect(201);
+  };
 
   const book = (startAt: Date, endAt: Date, extra: Record<string, unknown> = {}) =>
     auth(request(app.getHttpServer()).post('/reservations')).send({
@@ -125,7 +138,8 @@ describe('라이프사이클 (통합) — 연장/편도/변경', () => {
     const payments = ok.body.reservation.payments as { amountKrw: number }[];
     expect(payments.length).toBe(2); // 최초 결제 + 연장분
 
-    // 정리: 반납
+    // 정리: 체크인/체크아웃 후 반납
+    await completeChecks(rentalId);
     const returned = await auth(
       request(app.getHttpServer()).post(`/rentals/${rentalId}/return`),
     ).send({});
@@ -145,6 +159,7 @@ describe('라이프사이클 (통합) — 연장/편도/변경', () => {
     });
     expect(started.status).toBe(201);
 
+    await completeChecks(started.body.id);
     const returned = await auth(
       request(app.getHttpServer()).post(`/rentals/${started.body.id}/return`),
     ).send({});
