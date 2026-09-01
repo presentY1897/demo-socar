@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: socar
       POSTGRES_DB: socar
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - socar-pgdata:/var/lib/postgresql/data
     healthcheck:
