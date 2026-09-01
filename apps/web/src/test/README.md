@@ -22,6 +22,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `msw/fixtures.ts` | 목 데이터. **shared 응답 스키마로 `parse`** 해서 만든다 |
 | `msw/server.ts` | `setupServer` 인스턴스 |
 | `utils.tsx` | `renderWithProviders` — 세션·앱 라우터·SWR 캐시 주입, `MOCK_USERS` |
+| `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 
 ## 쓰는 법
 
@@ -66,6 +67,19 @@ server.use(
 );
 // ...인터랙션 후
 expect(body).toMatchObject({ insurance: 'FULL', useCredit: true });
+```
+
+## 사진 첨부(PhotoCapture)
+
+jsdom에는 캔버스 JPEG 인코더도 `createImageBitmap`도 없다. 브라우저 전용 부분만
+`stubImagePipeline()`으로 대역을 세우면 축소 크기 계산·품질 하향 루프는 실제 코드가 그대로 돈다.
+
+```tsx
+import { jpegFile, stubImagePipeline } from '@/test/image';
+
+// 품질 단계별 인코딩 결과 크기를 지정한다 (첫 단계 3MB → 두 번째 단계에서 통과)
+stubImagePipeline({ bytesPerStep: [3_000_000, 150 * 1024] });
+await userEvent.upload(screen.getByLabelText('사진 촬영'), jpegFile());
 ```
 
 ## 지도(Leaflet)
