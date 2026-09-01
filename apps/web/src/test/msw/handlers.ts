@@ -59,14 +59,13 @@ const vehiclesById = Object.fromEntries(
 );
 
 const reservationsById = Object.fromEntries(
-  [reservationConfirmed, reservationOneway, reservationDelivery].map((r) => [r.id, r]),
+  [reservationConfirmed, reservationInUse, reservationOneway, reservationDelivery].map((r) => [
+    r.id,
+    r,
+  ]),
 );
 
 const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
-
-const reservationsById = Object.fromEntries(
-  [reservationConfirmed, reservationInUse].map((r) => [r.id, r]),
-);
 
 /**
  * 기본 핸들러 — 대부분의 화면이 이 상태에서 렌더된다.
