@@ -3,7 +3,9 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { OPS_TAB_LABEL, opsTabSchema, type OpsTab } from '@socar/shared';
+import { OpsAccountingTab } from '@/components/ops/OpsAccountingTab';
 import { OpsCustomersTab } from '@/components/ops/OpsCustomersTab';
+import { OpsDispatchTab } from '@/components/ops/OpsDispatchTab';
 import { OpsFleetTab } from '@/components/ops/OpsFleetTab';
 import { OpsHomeTab } from '@/components/ops/OpsHomeTab';
 import { OpsZonesTab } from '@/components/ops/OpsZonesTab';
@@ -73,20 +75,11 @@ function OpsCenter() {
       <div className="mt-4">
         {tab === 'home' && <OpsHomeTab onNavigate={goto} />}
         {tab === 'fleet' && <OpsFleetTab targetId={targetId} />}
-        {tab === 'dispatch' && <Placeholder tab="dispatch" />}
+        {tab === 'dispatch' && <OpsDispatchTab />}
         {tab === 'zones' && <OpsZonesTab targetId={targetId} />}
         {tab === 'customers' && <OpsCustomersTab targetId={targetId} />}
-        {tab === 'accounting' && <Placeholder tab="accounting" />}
+        {tab === 'accounting' && <OpsAccountingTab />}
       </div>
     </div>
-  );
-}
-
-/** M3-6이 채운다 */
-function Placeholder({ tab }: { tab: OpsTab }) {
-  return (
-    <p className="py-16 text-center text-sm text-gray-400">
-      {OPS_TAB_LABEL[tab]} 탭은 준비 중이에요
-    </p>
   );
 }

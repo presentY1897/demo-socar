@@ -779,6 +779,30 @@ export const opsAccountingSummarySchema = z.object({
 });
 export type OpsAccountingSummaryRes = z.infer<typeof opsAccountingSummarySchema>;
 
+/**
+ * `GET /metrics/summary` — 회계 탭의 운영 지표 (M3-6에서 회계 전용으로 강등).
+ * 손익(`/ops/accounting/summary`)과 달리 예약·가동률·지연 반납처럼 "얼마나 굴렸나"를 본다.
+ */
+export const metricsSummarySchema = z.object({
+  days: z.number().int(),
+  vehicleCount: z.number().int(),
+  reservationCount: z.number().int(),
+  revenueKrw: z.number().int(),
+  utilizationPct: z.number(),
+  lateReturnPct: z.number(),
+  activeRentals: z.number().int(),
+  rentalsByStatus: z.record(z.string(), z.number().int()),
+});
+export type MetricsSummaryRes = z.infer<typeof metricsSummarySchema>;
+
+/** `GET /metrics/daily` 의 하루 — KST 달력 기준 */
+export const metricsDailyRowSchema = z.object({
+  day: z.string(),
+  reservations: z.number().int(),
+  revenueKrw: z.number().int(),
+});
+export type MetricsDailyRowRes = z.infer<typeof metricsDailyRowSchema>;
+
 // ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
 
 /**

@@ -11,6 +11,9 @@ import {
   opsAccountingSummarySchema,
   opsAlertSchema,
   opsFleetDetailSchema,
+  handlerCandidateSchema,
+  metricsDailyRowSchema,
+  metricsSummarySchema,
   liveVehicleSchema,
   liveVehiclesEventSchema,
   opsFleetVehicleSchema,
@@ -39,8 +42,10 @@ import {
   type HandlerQueueRes,
   type HandlerTaskRes,
   type IncidentResultRes,
+  type HandlerCandidateRes,
   type InquiryRes,
   type LiveVehiclesEvent,
+  type MetricsDailyRowRes,
   type OpsAlertRes,
   type OpsFleetVehicleRes,
   type OpsInquiryRes,
@@ -1110,6 +1115,78 @@ export const opsInquiryDone = make(opsInquirySchema, {
 });
 
 export const opsInquiries: OpsInquiryRes[] = [opsInquiryPending, opsInquiryDone];
+
+/**
+ * `GET /ops/tasks` — 운영 작업 목록 (기한 오름차순, 상태 섞임).
+ * 핸들러 큐 픽스처를 그대로 쓰면 "미배정 / 진행 중 / 오늘 완료"가 한 배열에 다 있다.
+ */
+export const opsTasks: HandlerTaskRes[] = [
+  taskRetrieveMine, // ASSIGNED (기한 지남)
+  taskDeliveryOpen, // PENDING — 배정 대상
+  taskRepositionUpcoming, // ASSIGNED (내일)
+  taskDoneToday, // DONE — 핸들러별 오늘 처리량
+];
+
+/** 미배정 작업 하나 더 — 큐가 한 줄만 있으면 정렬이 보이지 않는다 */
+export const opsTaskPendingLate = make(handlerTaskSchema, {
+  ...taskDeliveryOpen,
+  id: 'task-reposition-open',
+  type: 'REPOSITION',
+  reservationId: null,
+  to: { zoneId: zoneYeoksam.id, label: zoneYeoksam.name, lat: zoneYeoksam.lat, lng: zoneYeoksam.lng },
+  dueAt: hoursFromNow(6),
+});
+
+/** `GET /ops/tasks/:id/candidates` — 마지막 완료 지점에서 가까운 순 */
+export const opsCandidates: HandlerCandidateRes[] = [
+  make(handlerCandidateSchema, {
+    handlerId: 'user-handler',
+    name: '한기사',
+    lastCompletedAt: hoursFromNow(-3),
+    lastPlaceLabel: zoneGangnam.name,
+    distanceMeters: 400,
+    activeTaskCount: 1,
+    reasons: ['강남역 공영주차장에서 0.4km', '진행 중 작업 1건'],
+  }),
+  make(handlerCandidateSchema, {
+    handlerId: 'user-handler-2',
+    name: '이기사',
+    lastCompletedAt: hoursFromNow(-20),
+    lastPlaceLabel: zoneYeoksam.name,
+    distanceMeters: 1200,
+    activeTaskCount: 0,
+    reasons: ['역삼역 주차장에서 1.2km', '지금 맡은 작업 없음'],
+  }),
+  make(handlerCandidateSchema, {
+    handlerId: 'user-handler-3',
+    name: '박기사',
+    lastCompletedAt: null,
+    lastPlaceLabel: null,
+    distanceMeters: null,
+    activeTaskCount: 0,
+    reasons: ['완주 기록이 없어 거리를 알 수 없음'],
+  }),
+];
+
+/** `GET /metrics/summary` · `GET /metrics/daily` — 회계 탭 전용 지표 */
+export const metricsSummary = make(metricsSummarySchema, {
+  days: 30,
+  vehicleCount: 73,
+  reservationCount: 142,
+  revenueKrw: 4_120_000,
+  utilizationPct: 38.4,
+  lateReturnPct: 12.5,
+  activeRentals: 3,
+  rentalsByStatus: { IN_USE: 3, COMPLETED: 118 },
+});
+
+export const metricsDaily: MetricsDailyRowRes[] = Array.from({ length: 14 }, (_, i) =>
+  make(metricsDailyRowSchema, {
+    day: `2030-01-${String(i + 1).padStart(2, '0')}`,
+    reservations: 4 + (i % 5),
+    revenueKrw: 120_000 + i * 10_000,
+  }),
+);
 
 /** `GET /ops/plans` — 차량 등록 폼의 요금제 셀렉트 (시간당 요금 오름차순) */
 export const opsPlans: PricingPlanRes[] = [planStandard, planEv];

@@ -20,6 +20,9 @@ import {
   opsUserDetailSchema,
   opsUserRiskSchema,
   opsZoneSchema,
+  handlerCandidateSchema,
+  metricsDailyRowSchema,
+  metricsSummarySchema,
   pricingPlanSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
@@ -61,8 +64,13 @@ import {
   opsFleetDetail,
   opsInquiries,
   opsLeases,
+  opsCandidates,
   opsOverview,
   opsPlans,
+  opsTaskPendingLate,
+  opsTasks,
+  metricsDaily,
+  metricsSummary,
   opsUserDetail,
   opsUsersRisk,
   opsZonePaid,
@@ -470,6 +478,47 @@ export const handlers = [
 
   http.get(url('/ops/accounting/summary'), () =>
     json(opsAccountingSummarySchema, opsAccountingSummary),
+  ),
+
+  // ── 작업/배차 (M2-4 API · 화면은 M3-6) ──────────
+  http.get(url('/ops/tasks'), ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const status = params.get('status');
+    const type = params.get('type');
+    const rows = opsTasks.filter(
+      (t) => (!status || t.status === status) && (!type || t.type === type),
+    );
+    return HttpResponse.json(rows.map((t) => handlerTaskSchema.parse(t)));
+  }),
+
+  http.post(url('/ops/tasks'), async ({ request }) => {
+    const body = (await request.json()) as { vehicleId: string; toZoneId: string; dueAt: string };
+    return json(
+      handlerTaskSchema,
+      { ...opsTaskPendingLate, id: 'task-new', dueAt: body.dueAt },
+      201,
+    );
+  }),
+
+  http.get(url('/ops/tasks/:id/candidates'), () =>
+    HttpResponse.json(opsCandidates.map((c) => handlerCandidateSchema.parse(c))),
+  ),
+
+  http.post(url('/ops/tasks/:id/assign'), async ({ params, request }) => {
+    const body = (await request.json()) as { handlerId: string };
+    const candidate = opsCandidates.find((c) => c.handlerId === body.handlerId);
+    return transitionTask(String(params.id), {
+      status: 'ASSIGNED',
+      assigneeId: body.handlerId,
+      assigneeName: candidate?.name ?? '한기사',
+    });
+  }),
+
+  // ── 회계 탭 전용 지표 (기존 /metrics) ───────────
+  http.get(url('/metrics/summary'), () => json(metricsSummarySchema, metricsSummary)),
+
+  http.get(url('/metrics/daily'), () =>
+    HttpResponse.json(metricsDaily.map((d) => metricsDailyRowSchema.parse(d))),
   ),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────

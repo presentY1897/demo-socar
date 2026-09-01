@@ -130,8 +130,11 @@ M3-3이 백엔드를 끝내면서 픽스처와 기본 핸들러를 미리 넣어
 | `opsAccountingSummary` | 매출·비용·손익 |
 | `opsPlans` | 차량 등록 폼의 요금제 셀렉트 (`GET /ops/plans`) |
 | `liveVehicleInUse` · `liveTick({lat,lng})` | SSE 한 틱 — 운행 중 1대. 좌표를 바꿔 넣어 지도 갱신을 검증한다 |
+| `opsTasks` · `opsTaskPendingLate` · `opsCandidates` | 작업/배차 — 미배정 1건 + 진행 중 2건 + 오늘 완료 1건 · 추천 후보 3명(거리 미상 1명 포함) |
+| `metricsSummary` · `metricsDaily` | 회계 탭 전용 지표 (`GET /metrics/summary`·`/metrics/daily`) |
 
-`GET /ops/fleet?state=`와 `GET /ops/inquiries?status=`는 기본 핸들러가 실제로 필터링한다.
+`GET /ops/fleet?state=` · `GET /ops/inquiries?status=` · `GET /ops/tasks?status&type` 는
+기본 핸들러가 실제로 필터링한다.
 
 ### 실시간(SSE) 화면
 
