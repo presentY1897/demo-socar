@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { requiredPhotosSchema } from './photo';
 
 /**
  * 핸들러(운송기사) 작업 도메인 — 타입·상태와 상태 전이 규칙.
@@ -95,3 +96,16 @@ export function isHandlerTaskOverdue(
  * 차가 수령지에 방치되므로 반납 시각 기준의 여유 시간을 기한으로 둔다.
  */
 export const HANDLER_RETRIEVE_DUE_MINUTES = 120;
+
+/**
+ * 작업 완료 요청 — 인계 사진과 메모는 "그 자리에 차를 뒀다"는 유일한 증빙이라 둘 다 필수다.
+ * 체크인/아웃(M1-3)과 같은 사진 규격을 쓴다.
+ */
+export const completeHandlerTaskSchema = z.object({
+  note: z
+    .string()
+    .min(1, '인계 메모를 남겨 주세요')
+    .max(500, '메모는 500자까지 쓸 수 있어요'),
+  photos: requiredPhotosSchema,
+});
+export type CompleteHandlerTaskDto = z.infer<typeof completeHandlerTaskSchema>;

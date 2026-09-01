@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { conditionPhaseSchema } from './condition';
+import { handlerTaskStatusSchema, handlerTaskTypeSchema } from './handler-task';
 import { vehicleControlActionSchema } from './control';
 import { incidentStatusSchema, insuranceCoverageSchema } from './incident';
 import { inquiryCategorySchema, inquiryStatusSchema } from './inquiry';
@@ -20,7 +21,7 @@ export const fuelTypeSchema = z.enum(['EV', 'GASOLINE', 'HYBRID']);
 export const vehicleStatusSchema = z.enum(['AVAILABLE', 'MAINTENANCE']);
 export const reservationStatusSchema = z.enum(['CONFIRMED', 'IN_USE', 'COMPLETED', 'CANCELED']);
 export const rentalStatusSchema = z.enum(['IN_USE', 'RETURN_PENDING', 'COMPLETED']);
-export const roleSchema = z.enum(['USER', 'CORP_MEMBER', 'CORP_ADMIN', 'OPS_ADMIN']);
+export const roleSchema = z.enum(['USER', 'CORP_MEMBER', 'CORP_ADMIN', 'OPS_ADMIN', 'HANDLER']);
 export const paymentKindSchema = z.enum(['UPFRONT', 'DRIVE_SETTLEMENT', 'PENALTY']);
 export const paymentStatusSchema = z.enum([
   'PENDING',
@@ -323,6 +324,28 @@ export const dispatchCandidateSchema = z.object({
   bufferMinutes: z.number().int(),
   lateRiskPct: z.number(),
   reasons: z.array(z.string()),
+
+// ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
+
+/**
+ * 작업의 출발/도착 지점.
+ * 존이면 `zoneId`가 실리고, 부름 수령지처럼 존이 아닌 곳이면 좌표와 라벨만 실린다 —
+ * 작업 카드와 지도가 예약을 다시 조회하지 않고 "출발 → 도착"을 그릴 수 있는 형태다.
+ */
+export const taskPlaceSchema = z.object({
+  zoneId: z.string().nullable(),
+  label: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+});
+export type TaskPlaceRes = z.infer<typeof taskPlaceSchema>;
+
+/** `GET /handler/tasks` · `GET /ops/tasks` 의 작업 1건 */
+export const handlerTaskSchema = z.object({
+  id: z.string(),
+  type: handlerTaskTypeSchema,
+  status: handlerTaskStatusSchema,
+  reservationId: z.string().nullable(),
   vehicle: z.object({
     id: z.string(),
     modelName: z.string(),
@@ -498,3 +521,38 @@ export const opsLeaseSchema = bizLeaseSchema.extend({
   corporation: z.object({ id: z.string(), name: z.string() }),
 });
 export type OpsLeaseRes = z.infer<typeof opsLeaseSchema>;
+    fuel: fuelTypeSchema,
+  }),
+  from: taskPlaceSchema,
+  to: taskPlaceSchema,
+  assigneeId: z.string().nullable(),
+  assigneeName: z.string().nullable(),
+  dueAt: z.string(),
+  /** 기한이 지났는데 아직 안 끝난 작업 — 서버와 화면이 같은 기준(isHandlerTaskOverdue)을 본다 */
+  overdue: z.boolean(),
+  /** 출발 → 도착 예상 이동 시간(A*). 완료된 이력에는 싣지 않는다 */
+  etaMinutes: z.number().int().nullable(),
+  distanceMeters: z.number().int().nullable(),
+  assignedAt: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  canceledAt: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+  completionNote: z.string().nullable(),
+  createdAt: z.string(),
+  /** 완료 응답에만 실린다 — 목록에 base64 사진을 싣지 않기 위해서 */
+  photos: z.array(storedPhotoSchema).optional(),
+});
+export type HandlerTaskRes = z.infer<typeof handlerTaskSchema>;
+
+/**
+ * `GET /handler/tasks` — 핸들러 화면 한 벌을 채우는 작업 큐.
+ * 오늘/예정은 내 작업, `open`은 아직 주인이 없는 공개 작업, `done`은 최근 완료 이력이다.
+ */
+export const handlerQueueSchema = z.object({
+  today: z.array(handlerTaskSchema),
+  upcoming: z.array(handlerTaskSchema),
+  open: z.array(handlerTaskSchema),
+  done: z.array(handlerTaskSchema),
+});
+export type HandlerQueueRes = z.infer<typeof handlerQueueSchema>;
