@@ -7,14 +7,16 @@ import dayjs from 'dayjs';
 import type { RentalUsageRes } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/lib/format';
+import Link from 'next/link';
 import { fromParts, TIMES_10MIN, toDatePart, toTimePart } from '@/lib/timerange';
-import { TimeRangePicker } from '@/components/TimeRangePicker';
+import { ModifyReservationPanel } from '@/components/ModifyReservationPanel';
 import { ConditionReportForm, ConditionReportSummary } from '@/components/ConditionReportForm';
 import { IncidentForm } from '@/components/IncidentForm';
 import { SmartKeyPanel } from '@/components/SmartKeyPanel';
 
 interface Detail {
   id: string;
+  vehicleId: string;
   startAt: string;
   endAt: string;
   status: string;
@@ -31,9 +33,10 @@ interface Detail {
     modelName: string;
     plateNo: string;
     fuel: string;
-    zone: { name: string; address: string };
+    zone: { id: string; name: string; address: string; lat: number; lng: number };
     plan: { perKmKrw: number };
   };
+  returnZoneId: string | null;
   returnZone: { name: string } | null;
   payments: {
     id: string;
@@ -85,7 +88,6 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showModify, setShowModify] = useState(false);
-  const [modifyRange, setModifyRange] = useState<{ startAt: string; endAt: string } | null>(null);
   const [showExtend, setShowExtend] = useState(false);
   const [extendEnd, setExtendEnd] = useState<string | null>(null);
 
@@ -183,7 +185,13 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
             state={checkOut ? 'done' : checkIn ? 'current' : 'todo'}
             summary={checkIn ? undefined : '체크인 후 사용할 수 있어요'}
           >
-            {/* M1-6: 차종별 매뉴얼 링크 자리 */}
+            <Link
+              href={`/vehicles/${data.vehicleId}/manual`}
+              className="mb-3 flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-sky-400"
+            >
+              <span>📖 {data.vehicle.modelName} 매뉴얼 — 시동·충전·반납 전 확인</span>
+              <span className="text-gray-300">›</span>
+            </Link>
             {usage?.smartKey ? (
               <SmartKeyPanel rentalId={rental.id} state={usage.smartKey} />
             ) : (
@@ -331,13 +339,10 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
             <div className="flex gap-2">
               {!data.deliveryLabel && (
                 <button
-                  onClick={() => {
-                    setModifyRange({ startAt: data.startAt, endAt: data.endAt });
-                    setShowModify((v) => !v);
-                  }}
+                  onClick={() => setShowModify((v) => !v)}
                   className="flex-1 rounded-xl border border-sky-300 bg-white py-3 font-semibold text-sky-600"
                 >
-                  시간 변경
+                  예약 변경
                 </button>
               )}
               <button
@@ -349,31 +354,14 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
               </button>
             </div>
           )}
-          {showModify && modifyRange && (
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <TimeRangePicker
-                startAt={modifyRange.startAt}
-                endAt={modifyRange.endAt}
-                onChange={(startAt, endAt) => setModifyRange({ startAt, endAt })}
-              />
-              <p className="mt-2 text-[11px] text-gray-400">
-                차액은 추가 결제되거나 크레딧으로 환급돼요
-              </p>
-              <button
-                disabled={busy}
-                onClick={() =>
-                  act(() =>
-                    api(`/reservations/${data.id}`, {
-                      method: 'PATCH',
-                      body: { ...modifyRange, idempotencyKey: crypto.randomUUID() },
-                    }),
-                  )
-                }
-                className="mt-2 w-full rounded-lg bg-sky-500 py-2 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                이 시간으로 변경
-              </button>
-            </div>
+          {showModify && (
+            <ModifyReservationPanel
+              reservation={data}
+              onDone={async () => {
+                await Promise.all([mutate(), mutateUsage()]);
+                setShowModify(false);
+              }}
+            />
           )}
         </div>
       )}

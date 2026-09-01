@@ -11,6 +11,7 @@ import { server } from '@/test/msw/server';
 import {
   conditionCheckIn,
   conditionCheckOut,
+  reservationConfirmed,
   reservationInUse,
   usageCheckedIn,
   usageCheckedOut,
@@ -159,5 +160,31 @@ describe('예약 상세 — 이용 단계형 흐름', () => {
     expect(screen.queryByAltText('체크인 사진 1')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /체크인 — 차량 상태 촬영/ }));
     expect(await screen.findByAltText('체크인 사진 1')).toBeInTheDocument();
+  });
+});
+
+/**
+ * M1-5(반납존 변경)와 M1-6(매뉴얼)은 병렬 트랙에서 만들어져 이 페이지에 나중에 연결됐다.
+ * 두 연결이 다시 끊어지지 않도록 여기서 고정한다.
+ */
+describe('예약 상세 — 병렬 트랙 연결 지점', () => {
+  it('스마트키 단계에 그 차종의 매뉴얼 링크가 있다', async () => {
+    server.use(http.get(url(`/rentals/${reservationInUse.rental!.id}/usage`), () =>
+      HttpResponse.json(rentalUsageSchema.parse(usageCheckedIn)),
+    ));
+    renderDetail();
+
+    const link = await screen.findByRole('link', { name: /매뉴얼/ });
+    expect(link).toHaveAttribute('href', `/vehicles/${reservationInUse.vehicleId}/manual`);
+  });
+
+  it('이용 전 예약은 "예약 변경"으로 반납 존까지 바꿀 수 있는 패널을 연다', async () => {
+    const { userEvent } = renderDetail(reservationConfirmed.id);
+
+    await userEvent.click(await screen.findByRole('button', { name: '예약 변경' }));
+
+    // 시간만 있던 예전 인라인 폼이 아니라 반납 장소 선택이 함께 있는 패널이어야 한다
+    expect(await screen.findByLabelText('반납 장소')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이 내용으로 변경' })).toBeInTheDocument();
   });
 });
