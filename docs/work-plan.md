@@ -58,7 +58,7 @@
 | ☑ | [M1-5](task/m1-5-return-zone-change.md) | 예약 변경 시 반납존 변경 — 차액 정산 + 위치 체인 재검증 | M1-1 |
 | ☑ | [M1-6](task/m1-6-vehicle-manual.md) | 차종별 매뉴얼 — 모의 콘텐츠·API·페이지 | M1-1 |
 | ☑ | [M1-7](task/m1-7-inquiry-incident.md) | 문의 + 사고 접수(모의, 면책 안내) | M1-2 |
-| ☐ | [M1-8](task/m1-8-verify-deploy.md) | 검증·문서·배포 — ADR-007, 프로덕션 동선 완주 | M1-3~7 |
+| ☑ | [M1-8](task/m1-8-verify-deploy.md) | 검증·문서 — ADR-007, E2E 동선 완주 (배포는 스코프 아웃) | M1-3~7 |
 
 ## M2 — 핸들러(운송기사) 시스템 (M · 6개)
 

@@ -24,8 +24,9 @@
 - `apps/web/src/app/vehicles/[id]/manual/page.tsx` + `components/VehicleManualView.tsx`(신규)
 - 진입 링크: 예약 화면(`/book/[vehicleId]`)의 "📖 이 차종 매뉴얼 보기"
 
-> ⚠️ 남은 연결: 예약 상세의 스마트키 단계 진입 링크는 M1-4(스마트키)가 그 UI를 만들 때 붙인다
-> — `apps/web/src/app/reservations/[id]/page.tsx`를 M1-3이 재작성 중이라 손대지 않았다.
+> ✅ 연결 완료 (M1 병렬 트랙 머지): 예약 상세 ② 스마트키 단계 상단에
+> "📖 {차종} 매뉴얼 — 시동·충전·반납 전 확인" 링크가 붙었다.
+> 다시 끊어지지 않도록 `예약 상세 — 병렬 트랙 연결 지점` 테스트가 고정한다 (M1-8 회귀 점검).
 
 ## 완료 기준
 

@@ -23,9 +23,9 @@
 - reservations service `modify` 확장 (`resolveReturnZoneChange` · `assertLocationChainIntact`) · shared 스키마
 - `apps/web/src/components/ModifyReservationPanel.tsx`(신규) — 시각 + 반납존 + 차액 미리보기
 
-> ⚠️ 남은 연결: 예약 상세(`apps/web/src/app/reservations/[id]/page.tsx`)의 인라인 "시간 변경" 블록을
-> `<ModifyReservationPanel reservation={data} onDone={...} />`로 교체하는 일만 남았다.
-> 같은 파일을 M1-3(체크인/아웃 단계형 UI)이 재작성 중이라 충돌을 피해 보류했다.
+> ✅ 연결 완료 (M1 병렬 트랙 머지): 예약 상세의 인라인 "시간 변경" 블록이
+> `<ModifyReservationPanel reservation={data} onDone={...} />`로 교체됐다.
+> 다시 끊어지지 않도록 `예약 상세 — 병렬 트랙 연결 지점` 테스트가 고정한다 (M1-8 회귀 점검).
 
 ## 완료 기준
 
@@ -39,4 +39,4 @@
 
 ## 참고
 
-- [project-review.md](../project-review.md) §5.2 · [ADR-005](../adr/005-oneway-vehicle-location.md) — 변경 시 ADR-005의 "변경 미지원" 문구도 갱신할 것
+- [project-review.md](../project-review.md) §5.2 · [ADR-005](../adr/005-oneway-vehicle-location.md) — "변경 미지원" 문구는 갱신 완료 (§예약 변경 시 반납 존 변경)

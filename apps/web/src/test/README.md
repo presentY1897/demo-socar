@@ -18,7 +18,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | 파일 | 역할 |
 |---|---|
 | `setup.ts` | jest-dom · MSW 서버 생명주기 · jsdom 보충(matchMedia/ResizeObserver) |
-| `msw/handlers.ts` | 기본 핸들러 (존·차량·인증·예약). 전 테스트 공통 상태 |
+| `msw/handlers.ts` | 기본 핸들러 (존·차량·인증·예약·이용 플로우·문의/사고). 전 테스트 공통 상태 |
 | `msw/fixtures.ts` | 목 데이터. **shared 응답 스키마로 `parse`** 해서 만든다 |
 | `msw/server.ts` | `setupServer` 인스턴스 |
 | `utils.tsx` | `renderWithProviders` — 세션·앱 라우터·SWR 캐시 주입, `MOCK_USERS`, `routeParams` |
