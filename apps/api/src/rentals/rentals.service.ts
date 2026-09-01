@@ -24,6 +24,7 @@ import {
   type VehicleControlDto,
   type VehicleControlResultRes,
 } from '@socar/shared';
+import { HandlerTasksService } from '../handler/handler-tasks.service';
 import { PaymentsService } from '../payments/payments.service';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
 import { PrismaService } from '../prisma/prisma.service';
@@ -56,6 +57,7 @@ export class RentalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
+    private readonly handlerTasks: HandlerTasksService,
   ) {}
 
   /** 스마트키 문열기 = 대여 시작 */
@@ -245,6 +247,10 @@ export class RentalsService {
           data: { zoneId: rental.reservation.returnZoneId },
         });
       }
+
+      // 부름: 차는 아직 수령지에 있다 — 정산과 같은 트랜잭션에서 회수 작업을 만든다 (M2-2).
+      // 차량 존은 회수 작업이 완료될 때 비로소 갱신된다 (M2-3)
+      await this.handlerTasks.createRetrieveTask(tx, rental.reservation);
 
       return tx.rental.update({
         where: { id: rentalId },

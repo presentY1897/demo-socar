@@ -23,6 +23,7 @@ import {
   type QuoteBreakdown,
   type QuoteRequestDto,
 } from '@socar/shared';
+import { HandlerTasksService } from '../handler/handler-tasks.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { effectiveZoneIdAt, type ChainReservation } from '../common/vehicle-location';
@@ -42,6 +43,8 @@ interface QuoteResult {
   breakdown: QuoteBreakdown;
   returnZoneId: string | null;
   delivery: DeliveryDto | null;
+  /** 시작 시각의 유효 출발 존 (위치 체인 반영) — 부름 배달 작업의 출발지 */
+  startZoneId: string;
 }
 
 @Injectable()
@@ -49,6 +52,7 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
+    private readonly handlerTasks: HandlerTasksService,
     @Inject(TRAVEL_ESTIMATOR) private readonly travel: TravelTimeEstimator,
   ) {}
 
@@ -159,7 +163,7 @@ export class ReservationsService {
       creditBalanceKrw,
       useCredit: dto.useCredit,
     });
-    return { breakdown, returnZoneId, delivery };
+    return { breakdown, returnZoneId, delivery, startZoneId };
   }
 
   async create(
@@ -178,7 +182,7 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const { breakdown, returnZoneId, delivery } = await this.resolveQuote(tx, user, dto, startAt, endAt, opts);
+        const { breakdown, returnZoneId, delivery, startZoneId } = await this.resolveQuote(tx, user, dto, startAt, endAt, opts);
 
         // 1차 확인: 겹치는 예약이 있으면 친절한 409 (최종 방어는 DB EXCLUDE 제약)
         await this.assertNoOverlap(tx, dto.vehicleId, startAt, endAt);
@@ -227,6 +231,12 @@ export class ReservationsService {
             idempotencyKey: dto.idempotencyKey,
             cardLast4: dto.cardLast4,
           });
+        }
+
+        // 부름은 결제와 같은 트랜잭션에서 배달 작업을 만든다 (M2-2) —
+        // 예약만 있고 옮길 사람이 없는 상태를 만들지 않는다
+        if (delivery) {
+          await this.handlerTasks.createDeliveryTask(tx, reservation, startZoneId);
         }
 
         return tx.reservation.findUniqueOrThrow({
@@ -434,6 +444,9 @@ export class ReservationsService {
         await tx.coupon.update({ where: { id: resv.couponId }, data: { usedAt: null } });
       }
 
+      // 예약이 사라지면 그 예약을 위한 배달/회수도 의미가 없다 (EN_ROUTE는 제외 — M2-2)
+      await this.handlerTasks.cancelForReservation(tx, id, '예약 취소');
+
       return tx.reservation.update({
         where: { id },
         data: { status: 'CANCELED', canceledAt: new Date() },
@@ -566,6 +579,7 @@ export class ReservationsService {
     return {
       returnZoneId: null,
       delivery: null,
+      startZoneId: vehicle.zoneId,
       breakdown: {
         slotCount: Math.round((endAt.getTime() - startAt.getTime()) / SLOT_MS),
         rentalFeeKrw: 0,

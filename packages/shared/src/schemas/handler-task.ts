@@ -86,3 +86,12 @@ export function isHandlerTaskOverdue(
   if (isTerminalHandlerTaskStatus(task.status)) return false;
   return new Date(task.dueAt).getTime() < now.getTime();
 }
+
+/**
+ * 부름 회수 기한 — 이용 종료(정산 완료) 후 이 시간 안에 원래 존으로 되돌린다.
+ *
+ * 배달의 기한은 "이용 시작"이라는 약속된 시각에서 거꾸로 잡히지만(ADR-006 리드타임),
+ * 회수는 뒤에 기다리는 사람이 없어 기준이 될 시각이 없다. 그렇다고 무기한이면
+ * 차가 수령지에 방치되므로 반납 시각 기준의 여유 시간을 기한으로 둔다.
+ */
+export const HANDLER_RETRIEVE_DUE_MINUTES = 120;

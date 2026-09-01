@@ -71,6 +71,8 @@ describe('부름 (통합)', () => {
   });
 
   afterAll(async () => {
+    // 부름 예약은 배달 작업을 함께 만든다 (M2-2) — 차량보다 먼저 지운다
+    await prisma.handlerTask.deleteMany({ where: { vehicleId } });
     await prisma.payment.deleteMany({ where: { reservation: { vehicleId } } });
     await prisma.rental.deleteMany({ where: { reservation: { vehicleId } } });
     await prisma.reservation.deleteMany({ where: { vehicleId } });
