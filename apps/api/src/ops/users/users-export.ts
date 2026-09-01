@@ -10,6 +10,7 @@ import type { ExportSpec } from '../../common/export/export';
  */
 export const USERS_RISK_EXPORT: ExportSpec<OpsUserRiskRes> = {
   name: '유의유저',
+  asciiName: 'at-risk-users',
   columns: [
     { header: '이름', value: (u) => u.name },
     { header: '이메일', value: (u) => u.email },

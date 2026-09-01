@@ -17,6 +17,7 @@ export const reportExportSpec = (meta: ReportResponseRes['meta']): ExportSpec<Re
   const metric = REPORT_METRIC_META[meta.metric];
   return {
     name: `리포트_${metric.label}`,
+    asciiName: `report-${meta.metric}-by-${meta.groupBy}`,
     columns: [
       { header: REPORT_GROUP_BY_LABEL[meta.groupBy], value: (r) => r.label },
       { header: `${metric.label}(${REPORT_UNIT_LABEL[meta.unit]})`, value: (r) => r.value },

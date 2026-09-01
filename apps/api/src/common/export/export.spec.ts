@@ -56,6 +56,7 @@ describe('Export 파일 만들기', () => {
   }
   const spec: ExportSpec<Row> = {
     name: '테스트',
+    asciiName: 'test',
     columns: [
       { header: '이름', value: (r) => r.name },
       // 중첩은 자동으로 펴지 않는다 — 열 정의가 이름을 붙인다
@@ -108,13 +109,20 @@ describe('파일명과 Content-Disposition', () => {
   });
 
   it('한글 파일명은 RFC 5987로 함께 싣고 ASCII 대체본을 남긴다', () => {
-    const header = contentDisposition('차량목록_2026-09-01.csv');
+    const header = contentDisposition('차량목록_2026-09-01.csv', 'fleet_2026-09-01.csv');
 
     expect(header).toContain('attachment;');
     expect(header).toContain("filename*=UTF-8''");
     expect(header).toContain(encodeURIComponent('차량목록_2026-09-01.csv'));
-    // 대체본에는 한글이 남지 않는다 (못 읽는 클라이언트가 깨진 이름을 쓰지 않게)
-    expect(/filename="([^"]+)"/.exec(header)![1]).toBe('_____2026-09-01.csv');
+    // 대체본은 읽을 수 있는 이름이어야 한다 — 못 읽는 클라이언트가 받는 건 이쪽이다
+    expect(/filename="([^"]+)"/.exec(header)![1]).toBe('fleet_2026-09-01.csv');
+  });
+
+  it('ASCII 이름을 안 주면 한글이 밑줄이 되지만 밑줄 더미로 남기지는 않는다', () => {
+    const header = contentDisposition('차량목록_2026-09-01.csv');
+
+    // `_____2026-09-01.csv`처럼 읽을 수 없는 이름이 내려가지 않게 연속 밑줄을 접는다
+    expect(/filename="([^"]+)"/.exec(header)![1]).toBe('2026-09-01.csv');
   });
 
   it('생성일은 KST 달력 기준이다 — UTC 자정 직후에도 한국 날짜로 남는다', () => {

@@ -30,6 +30,7 @@ export interface MyReservationRow {
 
 export const MY_RESERVATIONS_EXPORT: ExportSpec<MyReservationRow> = {
   name: '내예약',
+  asciiName: 'my-reservations',
   columns: [
     { header: '예약 시작', value: (r) => iso(r.startAt) },
     { header: '예약 종료', value: (r) => iso(r.endAt) },

@@ -17,6 +17,7 @@ import type { ExportSpec } from '../../common/export/export';
  */
 export const TASKS_EXPORT: ExportSpec<HandlerTaskRes> = {
   name: '작업목록',
+  asciiName: 'handler-tasks',
   columns: [
     { header: '작업 유형', value: (t) => HANDLER_TASK_TYPE_META[t.type].label },
     { header: '상태', value: (t) => HANDLER_TASK_STATUS_META[t.status].label },

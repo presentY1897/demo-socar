@@ -129,7 +129,10 @@ describe('배정 API (통합)', () => {
     const queue = (
       await auth(nearToken)(request(app.getHttpServer()).get('/handler/tasks')).expect(200)
     ).body as HandlerQueueRes;
-    expect(queue.today.map((t) => t.id)).toContain(task.id);
+    // 여기서 보는 건 "내 큐에 들어왔는가"다. 오늘/예정 중 어느 칸인지는 기한이 자정을
+    // 넘는지에 달려 있어(dueAt = 지금+30분) 자정 30분 전에 돌리면 예정으로 간다 —
+    // 그 갈림은 handler-api.int-spec의 큐 분할 테스트가 따로 고정한다.
+    expect([...queue.today, ...queue.upcoming].map((t) => t.id)).toContain(task.id);
     expect(queue.open.map((t) => t.id)).not.toContain(task.id); // 더 이상 공개 작업이 아니다
   });
 

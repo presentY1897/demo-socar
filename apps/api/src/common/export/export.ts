@@ -25,6 +25,11 @@ export interface ExportColumn<T> {
 export interface ExportSpec<T> {
   /** 파일 이름 앞부분 (한국어) */
   name: string;
+  /**
+   * `filename*`(RFC 5987)을 못 읽는 옛 클라이언트가 받게 될 이름.
+   * 없으면 한글이 전부 `_`로 치환돼 `__________.csv` 같은 이름이 내려간다.
+   */
+  asciiName: string;
   columns: ExportColumn<T>[];
 }
 
@@ -32,6 +37,8 @@ export interface ExportFile {
   body: string;
   contentType: string;
   filename: string;
+  /** `filename*`을 못 읽는 클라이언트용 ASCII 이름 */
+  asciiFilename: string;
 }
 
 /** `?format=` 파싱 — 알 수 없는 값은 조용히 무시하지 않고 400 */
@@ -54,12 +61,14 @@ export function buildExportFile<T>(opts: {
 }): ExportFile {
   const { format, spec, rows, json, parts } = opts;
   const filename = exportFilename(spec.name, parts ?? [], format);
+  const asciiFilename = exportFilename(spec.asciiName, parts ?? [], format);
 
   if (format === 'json') {
     return {
       body: JSON.stringify(json ?? rows, null, 2),
       contentType: 'application/json; charset=utf-8',
       filename,
+      asciiFilename,
     };
   }
   return {
@@ -69,13 +78,14 @@ export function buildExportFile<T>(opts: {
     ),
     contentType: 'text/csv; charset=utf-8',
     filename,
+    asciiFilename,
   };
 }
 
 /** 헤더를 세우고 본문을 돌려준다 (컨트롤러가 `@Res({ passthrough: true })`로 받은 res에) */
 export function respondExport(res: Response, file: ExportFile): string {
   res.setHeader('Content-Type', file.contentType);
-  res.setHeader('Content-Disposition', contentDisposition(file.filename));
+  res.setHeader('Content-Disposition', contentDisposition(file.filename, file.asciiFilename));
   return file.body;
 }
 
@@ -83,8 +93,14 @@ export function respondExport(res: Response, file: ExportFile): string {
  * 한글 파일명은 `filename=`만으로는 브라우저가 깨뜨린다.
  * RFC 5987 `filename*`을 함께 실어 주고, 못 읽는 클라이언트를 위해 ASCII 대체본을 남긴다.
  */
-export function contentDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+export function contentDisposition(filename: string, asciiFilename = filename): string {
+  const ascii = asciiFilename
+    .replace(/[^\x20-\x7e]/g, '_')
+    .replace(/["\\]/g, '_')
+    // 한글 조각이 통째로 `_`가 되면 `____2026-09-01.csv`처럼 읽을 수 없는 이름이 남는다
+    .replace(/_{2,}/g, '_')
+    .replace(/_+\./, '.')
+    .replace(/^_+/, '');
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 

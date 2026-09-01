@@ -18,6 +18,7 @@ import type { ExportSpec } from '../../common/export/export';
  */
 export const FLEET_EXPORT: ExportSpec<OpsFleetVehicleRes> = {
   name: '차량목록',
+  asciiName: 'fleet',
   columns: [
     { header: '차량 번호', value: (v) => v.plateNo },
     { header: '차종', value: (v) => v.modelName },

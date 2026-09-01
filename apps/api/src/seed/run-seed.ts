@@ -23,8 +23,9 @@ import { initialTelemetry } from '../telemetry/telemetry-defaults';
  *   v6: 핸들러 도메인 추가 (HANDLER 계정 + 부름 배달/회수·재배치 샘플 작업)
  *   v7: 운영 백오피스 도메인 (텔레메트리·존 계약·도입/보험) + 경고 4종·유의 유저·문의함 데모 데이터
  *   v8: 운행 중(진행 중) 이용 1건 + 탁송 중(EN_ROUTE) 작업 1건 — 상태 4종과 SSE 좌표 이동을 시드만으로 재현
+ *   v9: 완료된 핸들러 작업 12건 — 리포트 '작업 처리량'과 핸들러별 처리량 차트가 0으로만 남지 않게
  */
-export const SEED_VERSION = 8;
+export const SEED_VERSION = 9;
 
 /** 법인 전용존 이름 — 시드가 만든 존을 테스트가 되짚을 때 쓴다 */
 export const CORP_ZONE_NAME = '데모컴퍼니 사옥 주차장';
@@ -564,6 +565,34 @@ export async function runSeed(prisma: PrismaClient) {
           fromZoneId: repositionVehicle.zoneId,
           toZoneId: repositionTo.id,
           dueAt: slot(8 * 60),
+        },
+      });
+      taskCount++;
+    }
+
+    // ④ 완료 이력 — 지난 2주에 걸쳐 흩어 둔다.
+    // 없으면 리포트의 '작업 처리량' 지표가 항상 0이고, 작업/배차 탭의 핸들러별
+    // 처리량 차트도 빈 채로 남는다 — 기능이 있어도 데모에서 확인할 수가 없다.
+    for (let d = 1; d <= 12; d += 1) {
+      const doneVehicle = vehicles[(d * 7) % vehicles.length];
+      const doneFrom = taskZones[d % taskZones.length];
+      const doneTo = taskZones[(d + 1) % taskZones.length];
+      if (!doneVehicle || !doneFrom || !doneTo || doneFrom.id === doneTo.id) continue;
+      const completedAt = new Date(Date.now() - d * 24 * 3600 * 1000 + (d % 5) * 3600 * 1000);
+      await prisma.handlerTask.create({
+        data: {
+          // 배달/회수는 예약에서 파생돼 짝이 맞아야 하므로, 이력은 예약이 없는 재배치로 채운다
+          type: HandlerTaskType.REPOSITION,
+          status: HandlerTaskStatus.DONE,
+          vehicleId: doneVehicle.id,
+          fromZoneId: doneFrom.id,
+          toZoneId: doneTo.id,
+          assigneeId: handler.id,
+          dueAt: new Date(completedAt.getTime() - 30 * 60 * 1000),
+          assignedAt: new Date(completedAt.getTime() - 90 * 60 * 1000),
+          startedAt: new Date(completedAt.getTime() - 45 * 60 * 1000),
+          completedAt,
+          completionNote: '재배치 완료 — 지정 존에 주차하고 잠금 확인',
         },
       });
       taskCount++;
