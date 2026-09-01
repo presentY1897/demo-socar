@@ -104,7 +104,7 @@
 | ☑ | [M5-3](task/m5-3-permission-guards.md) | 권한 가드 + 등급 관리 API — biz dispatch 적용·/biz/members | M5-2 |
 | ☑ | [M5-4](task/m5-4-grade-ui.md) | 등급 관리 UI + 등급별 화면 분기 — /biz/members·버튼/탭 노출 제어 | M5-3 |
 | ☑ | [M5-5](task/m5-5-fleet-lease-mgmt.md) | 법인 플릿/리스 관리 — /biz/fleet(만기·이용률·운행일지), 리스 연장/해지 워크플로(ops 처리) | M5-2·3 |
-| ☐ | [M5-6](task/m5-6-verify-deploy.md) | 검증·문서·배포 — 권한 매트릭스·리스 워크플로 전수, ADR-010(분리 경계+권한 모델) | M5-4·5 |
+| ☑ | [M5-6](task/m5-6-verify-deploy.md) | 검증·문서 — 권한 매트릭스·리스 워크플로 전수, ADR-010(분리 경계+권한 모델) (배포는 스코프 아웃) | M5-4·5 |
 
 ---
 
