@@ -48,7 +48,7 @@ export function buildOpsAlerts(input: AlertInput, now: Date = new Date()): OpsAl
     ...input.lowFuel.filter((v) => isLowFuel(v.fuelPct)).map((v) => alert('LOW_FUEL', {
       targetId: v.vehicleId,
       title: `${v.label} ${gaugeName(v.fuel)} ${Math.round(v.fuelPct)}%`,
-      detail: `${gaugeName(v.fuel)}가 ${Math.round(v.fuelPct)}% 남았어요 — ${v.fuel === 'EV' ? '충전' : '주유'}이 필요합니다`,
+      detail: `${gaugeName(v.fuel)}가 ${Math.round(v.fuelPct)}% 남았어요 — ${v.fuel === 'EV' ? '충전이' : '주유가'} 필요합니다`,
       at: null,
       dDay: null,
     })),

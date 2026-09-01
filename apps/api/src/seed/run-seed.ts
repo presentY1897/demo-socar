@@ -22,8 +22,9 @@ import { initialTelemetry } from '../telemetry/telemetry-defaults';
  *   v5: approver 계정 추가 — 등급 4종을 계정 스위칭만으로 시연할 수 있게
  *   v6: 핸들러 도메인 추가 (HANDLER 계정 + 부름 배달/회수·재배치 샘플 작업)
  *   v7: 운영 백오피스 도메인 (텔레메트리·존 계약·도입/보험) + 경고 4종·유의 유저·문의함 데모 데이터
+ *   v8: 운행 중(진행 중) 이용 1건 + 탁송 중(EN_ROUTE) 작업 1건 — 상태 4종과 SSE 좌표 이동을 시드만으로 재현
  */
-export const SEED_VERSION = 7;
+export const SEED_VERSION = 8;
 
 /** 법인 전용존 이름 — 시드가 만든 존을 테스트가 되짚을 때 쓴다 */
 export const CORP_ZONE_NAME = '데모컴퍼니 사옥 주차장';
@@ -705,6 +706,97 @@ export async function runSeed(prisma: PrismaClient) {
     });
   }
 
+  // ── ⑤ 운행 중(진행 중) ── 지금 도로 위를 달리고 있는 차 한 대.
+  //
+  // ④(지연 반납)만으로는 SSE에서 **좌표가 움직이지 않는다**. 반납 예정 시각을 넘긴 이동은
+  // 진행률이 1로 고정되기 때문이다(`telemetry-mock.positionAt`) — 주행거리·연료는 계속
+  // 변하지만 위치는 도착점에 붙박이가 된다. "운행 중 차량이 SSE에서 5초마다 움직인다"
+  // (M3-2 완료 기준)를 시드만으로 보이려면 **아직 끝나지 않은 이용**이 하나 있어야 한다.
+  const drivingStartAt = hoursAgo(1);
+  const drivingEndAt = new Date(Date.now() + 6 * 3600 * 1000); // 넉넉히 — 시드 후 6시간은 움직인다
+  const busyLater = new Set(
+    (
+      await prisma.reservation.findMany({
+        where: {
+          status: { not: ReservationStatus.CANCELED },
+          startAt: { lt: drivingEndAt },
+          endAt: { gt: drivingStartAt },
+        },
+        select: { vehicleId: true },
+      })
+    ).map((r) => r.vehicleId),
+  );
+  const freeVehicle = () =>
+    allVehicles.find(
+      (v) => v.corporationId === null && !occupied.has(v.id) && !busyLater.has(v.id),
+    );
+
+  const drivingVehicle = freeVehicle();
+  if (drivingVehicle) {
+    occupied.add(drivingVehicle.id);
+    await prisma.reservation.create({
+      data: {
+        userId: user.id,
+        vehicleId: drivingVehicle.id,
+        startAt: drivingStartAt,
+        endAt: drivingEndAt,
+        status: ReservationStatus.IN_USE,
+        insurance: InsuranceTier.STANDARD,
+        rentalFeeKrw: 42000,
+        insuranceFeeKrw: 9800,
+        totalUpfrontKrw: 51800,
+        createdAt: hoursAgo(3),
+        rental: { create: { status: RentalStatus.IN_USE, startedAt: drivingStartAt } },
+        payments: {
+          create: [
+            {
+              kind: PaymentKind.UPFRONT,
+              amountKrw: 51800,
+              status: PaymentStatus.CAPTURED,
+              idempotencyKey: 'seed-driving-now',
+              cardLast4: '4242',
+              approvedAt: hoursAgo(3),
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  // ── ⑥ 탁송 중(EN_ROUTE) ── 핸들러가 차 키를 쥐고 도로 위에 있는 상태.
+  // 상태 4종(대기/운행/탁송/정비) 중 '탁송 중'만 시드에 없으면 Fleet 탭의 상태 필터와
+  // 운영 홈의 "탁송 중" 스탯이 늘 0이 된다. 같은 지역에서 **가장 먼 존**을 목적지로 잡는다 —
+  // 탁송 보간의 페이스가 A* 추정 시간이라, 가까운 존끼리 붙이면 몇 분 만에 도착해 멈춘다.
+  const transitVehicle = freeVehicle();
+  const transitFrom = allZones.find((z) => z.id === transitVehicle?.zoneId);
+  const transitTo = transitFrom
+    ? allZones
+        .filter((z) => z.region === transitFrom.region && z.id !== transitFrom.id)
+        .sort(
+          (a, b) =>
+            (b.lat - transitFrom.lat) ** 2 +
+            (b.lng - transitFrom.lng) ** 2 -
+            ((a.lat - transitFrom.lat) ** 2 + (a.lng - transitFrom.lng) ** 2),
+        )[0]
+    : undefined;
+  if (transitVehicle && transitFrom && transitTo) {
+    occupied.add(transitVehicle.id);
+    await prisma.handlerTask.create({
+      data: {
+        type: HandlerTaskType.REPOSITION,
+        status: HandlerTaskStatus.EN_ROUTE,
+        vehicleId: transitVehicle.id,
+        fromZoneId: transitFrom.id,
+        toZoneId: transitTo.id,
+        assigneeId: handler.id,
+        assignedAt: hoursAgo(1),
+        startedAt: new Date(Date.now() - 3 * 60 * 1000), // 3분 전 출발 — 아직 가는 중
+        dueAt: slot(120),
+      },
+    });
+    taskCount++;
+  }
+
   // ── 유의 유저 (고객 탭) ── 지연 반납·사고·결제 거절이 한 계정에 몰리도록 확정한다.
   // 새 예약을 만들지 않고 기존 완료 이력을 고쳐 쓴다 — 시간 겹침(EXCLUDE) 제약을 건드리지 않는 쪽.
   const riskRentals = await prisma.rental.findMany({
@@ -823,7 +915,8 @@ export async function runSeed(prisma: PrismaClient) {
   );
   console.log(
     `  운영 도메인: telemetry=${allVehicles.length}, finance=${allVehicles.length}, zoneContracts=${allZones.length}` +
-      ` / 경고 케이스: 연료부족 1 · 보험만기 1 · 계약만료 1 · 지연반납 ${lateVehicle ? 1 : 0}`,
+      ` / 경고 케이스: 연료부족 1 · 보험만기 1 · 계약만료 1 · 지연반납 ${lateVehicle ? 1 : 0}` +
+      ` / 움직이는 차: 운행 중 ${drivingVehicle ? 1 : 0} · 탁송 중 ${transitVehicle && transitTo ? 1 : 0}`,
   );
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr     개인 이용자');
