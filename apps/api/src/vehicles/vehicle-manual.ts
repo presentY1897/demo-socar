@@ -3,8 +3,9 @@
  *
  * DB 테이블 대신 API 내 정적 데이터로 시작한다 (M1-1 결정 — 매뉴얼은 운영자가 편집하는
  * 데이터가 아니라 차종에 붙는 고정 콘텐츠라서 시드/마이그레이션 대상이 아니다).
- * 노출 엔드포인트(`GET /vehicles/:id/manual`)와 화면은 M1-6에서 붙인다.
+ * 노출은 `GET /vehicles/:id/manual` + `/vehicles/[id]/manual` 페이지 (M1-6).
  */
+import type { FuelKind } from '@socar/shared';
 
 export interface VehicleManualSection {
   title: string;
@@ -13,88 +14,142 @@ export interface VehicleManualSection {
 
 export interface VehicleManual {
   modelName: string;
+  fuel: FuelKind;
   tagline: string; // 한 줄 소개
   sections: VehicleManualSection[];
 }
 
 /** 차종별로 달라지는 값들 — 나머지 문장은 여기서 조립한다 */
 interface ManualSpec {
+  fuel: FuelKind;
   tagline: string;
   /** 시동/출발 방법 */
   ignition: string;
   /** 주유구/충전구 위치와 방법 */
   refuel: string;
+  /** 공조·인포테인먼트 등 실내 조작 */
+  comfort: string;
   /** 차종 특징 한두 가지 (적재/시트/편의장비) */
   feature: string;
 }
 
 const SPECS: Record<string, ManualSpec> = {
   레이: {
+    fuel: 'GASOLINE',
     tagline: '박스형 경차 — 좁은 골목과 주차가 편한 차',
     ignition: '브레이크를 밟고 스마트키 버튼을 누르면 시동이 걸립니다. 기어는 다이얼식이 아닌 레버식입니다.',
     refuel: '주유구는 운전석 왼쪽 뒤편, 휘발유(가솔린)를 넣습니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '공조는 다이얼 3개(온도·풍량·풍향)로 조작합니다. 김서림이 생기면 앞유리 서리 제거 버튼을 누르고 A/C를 켜세요.',
     feature: '뒷좌석을 접으면 자전거도 실립니다. 슬라이딩 도어라 좁은 주차장에서 문 여닫기가 편합니다.',
   },
   캐스퍼: {
+    fuel: 'GASOLINE',
     tagline: '경형 SUV — 시야가 높은 도심용 경차',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 주차 시 P 버튼을 눌러야 기어가 잠깁니다.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '공조는 센터패널 다이얼로, 열선 시트는 기어 옆 버튼으로 켭니다. 블루투스는 화면의 설정 > 연결에서 붙입니다.',
     feature: '앞좌석까지 접히는 시트 구조라 짐 싣기에 좋습니다. 후방 카메라가 기본 장착돼 있습니다.',
   },
   아반떼: {
+    fuel: 'GASOLINE',
     tagline: '준중형 세단 — 장거리 연비가 좋은 기본기 차량',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 전자식 파킹 브레이크(EPB)는 자동 해제됩니다.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다. 셀프 주유소에서 주유 카드로 결제하세요.',
+    comfort: '풀오토 공조라 온도만 맞춰두면 됩니다. AUTO 버튼을 켜고 22~24도를 권장합니다.',
     feature: '스마트 크루즈 컨트롤이 있어 고속도로 주행이 편합니다. 트렁크는 골프백 2개가 들어갑니다.',
   },
   K5: {
+    fuel: 'GASOLINE',
     tagline: '중형 세단 — 4인 이상 장거리 이동에 적합',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 기어는 다이얼(SBW)식이라 돌려서 D/R을 선택합니다.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '운전석/조수석 온도를 따로 맞추는 듀얼 공조입니다. 통풍 시트는 공조 패널 아래 버튼입니다.',
     feature: '뒷좌석 레그룸이 넓고 통풍 시트가 있습니다. 트렁크 용량은 510L입니다.',
   },
   '아이오닉 5': {
+    fuel: 'EV',
     tagline: '전기 SUV — 급속 충전 18분(80%)의 장거리 EV',
     ignition: '브레이크를 밟으면 READY 표시가 뜹니다(엔진음이 없으니 계기판을 확인하세요). 기어는 스티어링 휠 오른쪽 컬럼 레버입니다.',
     refuel: '충전구는 조수석 뒤편입니다. 급속은 DC 콤보(CCS), 완속은 AC 단상. 충전 카드는 센터콘솔에 있습니다. 반납 시 배터리 30% 이상을 권장합니다.',
+    comfort: '공조는 화면 아래 터치 패널입니다. 주행 가능 거리를 아끼려면 실내 난방 대신 열선 시트/스티어링을 먼저 쓰세요.',
     feature: 'V2L(차량 외부 급전)을 쓸 수 있고, 뒷좌석 레그룸이 매우 넓습니다. 회생제동 단계는 패들 시프트로 조절합니다.',
   },
   EV6: {
+    fuel: 'EV',
     tagline: '전기 크로스오버 — 고속 주행 안정성이 좋은 EV',
     ignition: '브레이크를 밟으면 READY 표시가 뜹니다. 기어는 다이얼식이며 시동 후 D로 돌립니다.',
     refuel: '충전구는 운전석 뒤편입니다. 급속은 DC 콤보(CCS), 완속은 AC 단상. 충전 카드는 센터콘솔에 있습니다. 반납 시 배터리 30% 이상을 권장합니다.',
+    comfort: '공조와 내비게이션이 한 패널을 나눠 씁니다. 패널 왼쪽 끝의 전환 버튼을 눌러야 공조 조작으로 바뀝니다.',
     feature: '원 페달 드라이빙(i-Pedal)을 지원합니다. 프렁크(앞 트렁크)에 충전 케이블이 들어 있습니다.',
   },
   쏘렌토: {
+    fuel: 'HYBRID',
     tagline: '중형 하이브리드 SUV — 7인승 가족 여행용',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 하이브리드라 저속에서는 엔진이 꺼져 있을 수 있습니다.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)를 넣습니다. 별도 충전은 필요 없습니다(자체 충전형 하이브리드).',
+    comfort: '1·2열 공조가 분리돼 있습니다. 3열 승객이 있으면 천장 송풍구를 열고 리어 공조를 켜세요.',
     feature: '3열을 접으면 적재 공간이 크게 늘어납니다. 3열 탑승 시 트렁크는 캐리어 2개 정도입니다.',
   },
   셀토스: {
+    fuel: 'GASOLINE',
     tagline: '소형 SUV — 도심과 근교 나들이에 두루 쓰기 좋은 차',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 주차 시 P 버튼을 눌러 기어를 잠급니다.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '풀오토 공조에 열선/통풍 시트 버튼이 기어 옆에 있습니다. 선루프는 천장 스위치로 여닫습니다.',
     feature: '전동 트렁크와 후방 교차 충돌 경고가 있습니다. 루프랙에 짐을 묶을 수 있습니다.',
   },
   카니발: {
+    fuel: 'GASOLINE',
     tagline: '대형 미니밴 — 단체 이동과 짐이 많은 일정에 적합',
     ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 차폭이 넓으니 출발 전 사이드미러를 꼭 조정하세요.',
     refuel: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '앞/뒤 공조가 따로 돕니다. 2·3열 승객이 있으면 리어 공조를 켜고 천장 송풍구를 열어주세요.',
     feature: '양쪽 슬라이딩 도어는 B필러 버튼으로 전동 개폐됩니다. 3열을 바닥으로 접으면 이사짐도 실립니다.',
   },
 };
 
-/** 차종을 못 찾았을 때 쓰는 기본 매뉴얼 */
-const FALLBACK_SPEC: ManualSpec = {
-  tagline: '기본 이용 안내 — 차종별 상세는 차량 내 매뉴얼을 참고하세요',
-  ignition: '브레이크를 밟고 시동 버튼을 누릅니다.',
-  refuel: '주유/충전 카드는 선바이저 또는 센터콘솔에 있습니다.',
-  feature: '차량 내부에 비치된 종이 매뉴얼에서 상세 기능을 확인할 수 있습니다.',
+/** 차종을 못 찾았을 때 쓰는 기본 매뉴얼 — 연료 타입만큼은 맞춰서 안내한다 */
+const FALLBACK_SPECS: Record<FuelKind, Omit<ManualSpec, 'fuel'>> = {
+  EV: {
+    tagline: '전기차 기본 이용 안내 — 차종별 상세는 차량 내 매뉴얼을 참고하세요',
+    ignition: '브레이크를 밟으면 계기판에 READY가 뜹니다. 엔진음이 없으니 소리 대신 계기판으로 확인하세요.',
+    refuel: '충전 카드는 센터콘솔에 있습니다. 급속은 DC 콤보(CCS), 완속은 AC 단상이며 반납 시 배터리 30% 이상을 권장합니다.',
+    comfort: '주행 가능 거리를 아끼려면 실내 난방보다 열선 시트를 먼저 쓰세요.',
+    feature: '차량 내부에 비치된 종이 매뉴얼에서 상세 기능을 확인할 수 있습니다.',
+  },
+  HYBRID: {
+    tagline: '하이브리드 기본 이용 안내 — 차종별 상세는 차량 내 매뉴얼을 참고하세요',
+    ignition: '브레이크를 밟고 시동 버튼을 누릅니다. 저속에서는 엔진이 꺼져 있을 수 있습니다.',
+    refuel: '휘발유(가솔린)를 넣습니다. 별도 충전은 필요 없습니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '공조는 센터패널에서 조작합니다. 김서림이 생기면 앞유리 서리 제거와 A/C를 함께 켜세요.',
+    feature: '차량 내부에 비치된 종이 매뉴얼에서 상세 기능을 확인할 수 있습니다.',
+  },
+  GASOLINE: {
+    tagline: '기본 이용 안내 — 차종별 상세는 차량 내 매뉴얼을 참고하세요',
+    ignition: '브레이크를 밟고 시동 버튼을 누릅니다.',
+    refuel: '휘발유(가솔린)를 넣습니다. 주유 카드는 선바이저에 있습니다.',
+    comfort: '공조는 센터패널에서 조작합니다. 김서림이 생기면 앞유리 서리 제거와 A/C를 함께 켜세요.',
+    feature: '차량 내부에 비치된 종이 매뉴얼에서 상세 기능을 확인할 수 있습니다.',
+  },
 };
 
+/** 반납 전 확인 항목 — 연료 타입에 따라 마지막 줄이 달라진다 */
+function returnChecklist(fuel: FuelKind): string {
+  const energy =
+    fuel === 'EV'
+      ? '배터리 잔량 30% 이상 (부족하면 존 근처 충전소에서 충전 카드로 충전)'
+      : '연료 게이지 1/4 이상 (부족하면 주유 카드로 주유)';
+  return [
+    '반납 전 이것만 확인하세요:',
+    `① ${energy}`,
+    '② 개인 물품·쓰레기 회수 (분실물은 반납 후 찾기 어렵습니다)',
+    '③ 창문·선루프 닫힘, 실내등 소등',
+    '④ 지정된 존(편도라면 반납 존)의 주차 구획 안에 주차',
+  ].join('\n');
+}
+
 /** 모든 차종이 공유하는 이용 규칙 (앱 동선과 1:1로 맞춘 문장) */
-function commonSections(): VehicleManualSection[] {
+function commonSections(fuel: FuelKind): VehicleManualSection[] {
   return [
     {
       title: '이용 시작 — 체크인',
@@ -104,6 +159,7 @@ function commonSections(): VehicleManualSection[] {
       title: '스마트키',
       body: '앱의 스마트키 패널에서 문 열기/잠금, 비상등, 경적, 시동을 조작합니다. 차를 찾기 어려우면 비상등을 켜세요. 조작 이력은 모두 기록됩니다.',
     },
+    { title: '반납 전 체크리스트', body: returnChecklist(fuel) },
     {
       title: '반납 — 체크아웃',
       body: '지정된 존(편도라면 반납 존)에 주차한 뒤, 주차 위치 사진과 층/구역 메모를 담은 체크아웃을 제출해야 반납이 완료됩니다. 반납 후 주행요금이 자동 정산됩니다.',
@@ -115,17 +171,27 @@ function commonSections(): VehicleManualSection[] {
   ];
 }
 
-/** 차종 매뉴얼 조회 — 등록되지 않은 차종은 기본 매뉴얼을 돌려준다 */
-export function getVehicleManual(modelName: string): VehicleManual {
-  const spec = SPECS[modelName] ?? FALLBACK_SPEC;
+/**
+ * 차종 매뉴얼 조회.
+ * 등록되지 않은 차종은 연료 타입에 맞는 기본 매뉴얼로 대체한다 —
+ * 새 차종이 시드에 들어와도 EV에 "주유하세요" 같은 안내가 나가지 않게.
+ */
+export function getVehicleManual(modelName: string, fuel?: FuelKind): VehicleManual {
+  const known = SPECS[modelName];
+  // 등록된 차종은 자기 정의가 우선 — 본문(충전 vs 주유)과 체크리스트가 어긋나지 않게
+  const resolvedFuel = known?.fuel ?? fuel ?? 'GASOLINE';
+  const spec = known ?? { ...FALLBACK_SPECS[resolvedFuel], fuel: resolvedFuel };
+
   return {
     modelName,
+    fuel: resolvedFuel,
     tagline: spec.tagline,
     sections: [
       { title: '시동 걸기 / 기어', body: spec.ignition },
       { title: '주유 · 충전', body: spec.refuel },
+      { title: '공조 · 편의 기능', body: spec.comfort },
       { title: '이 차의 특징', body: spec.feature },
-      ...commonSections(),
+      ...commonSections(resolvedFuel),
     ],
   };
 }

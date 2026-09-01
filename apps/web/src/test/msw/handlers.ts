@@ -14,6 +14,7 @@ import {
   reservationSchema,
   vehicleControlResultSchema,
   vehicleDetailSchema,
+  vehicleManualSchema,
   zoneDetailSchema,
   zoneMarkerSchema,
   type QuoteRequestDto,
@@ -40,6 +41,7 @@ import {
   userPersonal,
   vehicleAvante,
   vehicleIoniq,
+  vehicleManuals,
   zoneDetails,
   zoneGangnam,
   zoneMarkers,
@@ -93,6 +95,12 @@ export const handlers = [
   }),
 
   // ── 차량 ────────────────────────────────────────
+  http.get(url('/vehicles/:id/manual'), ({ params }) => {
+    const manual = vehicleManuals[String(params.id)];
+    if (!manual) return HttpResponse.json({ message: '차량을 찾을 수 없습니다' }, { status: 404 });
+    return json(vehicleManualSchema, manual);
+  }),
+
   http.get(url('/vehicles/:id/availability'), ({ request }) => {
     const date = new URL(request.url).searchParams.get('date') ?? '2030-01-02';
     return json(availabilitySchema, { date, busy: [] });

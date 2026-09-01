@@ -10,6 +10,7 @@ import {
   rentalUsageSchema,
   reservationSchema,
   smartKeyStateSchema,
+  vehicleManualSchema,
   vehicleSummarySchema,
   zoneDetailSchema,
   zoneMarkerSchema,
@@ -20,6 +21,7 @@ import {
   type InquiryRes,
   type RentalUsageRes,
   type ReservationRes,
+  type VehicleManualRes,
   type ZoneDetailRes,
   type ZoneMarkerRes,
 } from '@socar/shared';
@@ -130,6 +132,45 @@ export const vehicleIoniq = make(vehicleSummarySchema, {
   planId: planEv.id,
   plan: planEv,
 });
+
+// ─────────────────────── 차종 매뉴얼 ───────────────────────
+
+/** 내연기관 매뉴얼 — 주유/시동 문구가 EV와 달라야 한다 */
+export const manualAvante = make(vehicleManualSchema, {
+  vehicleId: vehicleAvante.id,
+  modelName: vehicleAvante.modelName,
+  plateNo: vehicleAvante.plateNo,
+  fuel: 'GASOLINE',
+  tagline: '준중형 세단 — 장거리 연비가 좋은 기본기 차량',
+  sections: [
+    { title: '시동 걸기 / 기어', body: '브레이크를 밟고 시동 버튼을 누릅니다.' },
+    { title: '주유 · 충전', body: '주유구는 조수석 뒤편, 휘발유(가솔린)입니다.' },
+    { title: '공조 · 편의 기능', body: '풀오토 공조라 온도만 맞춰두면 됩니다.' },
+    { title: '이 차의 특징', body: '스마트 크루즈 컨트롤이 있어 고속도로 주행이 편합니다.' },
+    { title: '반납 전 체크리스트', body: '① 연료 게이지 1/4 이상\n② 개인 물품 회수' },
+  ],
+});
+
+/** 전기차 매뉴얼 — 같은 섹션 제목에 다른 본문 */
+export const manualIoniq = make(vehicleManualSchema, {
+  vehicleId: vehicleIoniq.id,
+  modelName: vehicleIoniq.modelName,
+  plateNo: vehicleIoniq.plateNo,
+  fuel: 'EV',
+  tagline: '전기 SUV — 급속 충전 18분(80%)의 장거리 EV',
+  sections: [
+    { title: '시동 걸기 / 기어', body: '브레이크를 밟으면 READY 표시가 뜹니다.' },
+    { title: '주유 · 충전', body: '충전구는 조수석 뒤편입니다. 급속은 DC 콤보(CCS)를 씁니다.' },
+    { title: '공조 · 편의 기능', body: '난방 대신 열선 시트를 먼저 쓰면 주행 거리를 아낄 수 있어요.' },
+    { title: '이 차의 특징', body: 'V2L(차량 외부 급전)을 쓸 수 있습니다.' },
+    { title: '반납 전 체크리스트', body: '① 배터리 잔량 30% 이상\n② 개인 물품 회수' },
+  ],
+});
+
+export const vehicleManuals: Record<string, VehicleManualRes> = {
+  [manualAvante.vehicleId]: manualAvante,
+  [manualIoniq.vehicleId]: manualIoniq,
+};
 
 /** 강남 존 상세 — 바로 픽업 1대 + 부름 1대 */
 export const zoneGangnamDetail: ZoneDetailRes = make(zoneDetailSchema, {

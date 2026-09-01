@@ -184,6 +184,12 @@ function BookPageInner({ vehicleId }: { vehicleId: string }) {
         <p className="mt-1 text-xs text-gray-400">
           주행요금 {vehicle?.fuel === 'EV' ? '무료 (전기차)' : `30km 초과분 ${krw(vehicle?.plan.perKmKrw ?? 0)}/km`} · 반납 후 자동 정산
         </p>
+        <Link
+          href={`/vehicles/${vehicleId}/manual`}
+          className="mt-2 inline-block text-xs text-sky-500 underline"
+        >
+          📖 이 차종 매뉴얼 보기
+        </Link>
       </div>
 
       {/* 수령 방법: 존 픽업 / 부름 */}

@@ -97,6 +97,17 @@ export const vehicleDetailSchema = vehicleSummarySchema.extend({
   zone: zoneMarkerSchema.omit({ vehicleCount: true }),
 });
 
+/** `GET /vehicles/:id/manual` — 차종별 모의 매뉴얼 (섹션 아코디언) */
+export const vehicleManualSchema = z.object({
+  vehicleId: z.string(),
+  modelName: z.string(),
+  plateNo: z.string(),
+  fuel: fuelTypeSchema,
+  tagline: z.string(),
+  sections: z.array(z.object({ title: z.string(), body: z.string() })),
+});
+export type VehicleManualRes = z.infer<typeof vehicleManualSchema>;
+
 /** `GET /vehicles/:id/availability?date=YYYY-MM-DD` */
 export const availabilitySchema = z.object({
   date: z.string(),

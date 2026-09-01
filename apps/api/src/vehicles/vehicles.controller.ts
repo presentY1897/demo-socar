@@ -1,6 +1,8 @@
 import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import type { VehicleManualRes } from '@socar/shared';
 import { Public } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
+import { getVehicleManual } from './vehicle-manual';
 
 @Controller('vehicles')
 export class VehiclesController {
@@ -18,6 +20,28 @@ export class VehiclesController {
       throw new NotFoundException('차량을 찾을 수 없습니다');
     }
     return vehicle;
+  }
+
+  /** 차종별 매뉴얼 — modelName·fuel로 정적 콘텐츠를 골라 돌려준다 */
+  @Public()
+  @Get(':id/manual')
+  async manual(@Param('id') id: string): Promise<VehicleManualRes> {
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id },
+      select: { id: true, modelName: true, plateNo: true, fuel: true, corporationId: true },
+    });
+    if (!vehicle || vehicle.corporationId !== null) {
+      throw new NotFoundException('차량을 찾을 수 없습니다');
+    }
+    const manual = getVehicleManual(vehicle.modelName, vehicle.fuel);
+    return {
+      vehicleId: vehicle.id,
+      modelName: vehicle.modelName,
+      plateNo: vehicle.plateNo,
+      fuel: manual.fuel,
+      tagline: manual.tagline,
+      sections: manual.sections,
+    };
   }
 
   /**
