@@ -10,7 +10,7 @@ import {
 } from '@socar/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { effectiveZoneIdAt } from '../common/vehicle-location';
-import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/travel-time';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../common/travel/travel-time';
 
 interface TimeRange {
   startAt: Date;

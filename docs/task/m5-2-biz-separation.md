@@ -62,7 +62,7 @@
 |---|---|---|---|
 | 1 | **공용 DB 직접 조회** | `dispatch.service`의 후보 탐색·보드가 `zone`/`vehicle`/`reservation`/`rental` 테이블을 Prisma로 직접 읽는다 (반경 필터·겹침 판정·지연 리스크 집계) | "차량 가용성 조회" 읽기 API 또는 읽기 전용 복제 |
 | 2 | **차량 가용성 판정 규칙** | 겹침 판정과 편도 위치 체인(`common/vehicle-location`의 `effectiveZoneIdAt`, ADR-005)을 biz가 자체 구현으로 재현 중 | 가용성 판정을 소비자 도메인 API로 노출하고 biz는 결과만 소비 |
-| 3 | **이동시간 추정기 위치** | `TRAVEL_ESTIMATOR`는 포트로 잘 분리돼 있으나 파일이 `apps/api/src/dispatch/travel/`에 남아 있다 (zones·reservations도 함께 쓰는 공용 인프라). M1 병행 작업이 임포터를 쥐고 있어 이동을 미뤘다 | `src/common/travel/`로 이동 + 임포터 2곳(`reservations`, `zones`) 경로 갱신 |
+| 3 | ~~**이동시간 추정기 위치**~~ (M5-6에서 해소) | `TRAVEL_ESTIMATOR`는 포트로 잘 분리돼 있으나 파일이 `apps/api/src/dispatch/travel/`에 남아 있었다 (zones·reservations도 함께 쓰는 공용 인프라). M1 병행 작업이 임포터를 쥐고 있어 이동을 미뤘다 | **완료** — M1 종료 후 M5-6에서 `src/common/travel/`로 이동, 임포터 3곳(`reservations`·`zones`·biz `dispatch`) 갱신. `src/dispatch/`는 없어졌다 |
 | 4 | **예약 충돌 계약** | 어댑터가 Nest `ConflictException`을 그대로 흘린다 — 프로세스 내 호출이라 성립 | 원격 409 → 도메인 예외 번역을 어댑터에 넣기 |
 | 5 | **인증 세션 공유** | 같은 JWT·`JwtAuthGuard`를 소비자 앱과 공유 | 별도 배포 시 토큰 발급자/검증 공유(JWKS) 또는 biz 전용 세션 |
 | 6 | **루트 레이아웃 공유(웹)** | `AppShell`이 경로로 두 셸을 가른다 | 별도 앱 분리 시 이 분기 제거 |

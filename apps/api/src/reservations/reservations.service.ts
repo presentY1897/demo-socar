@@ -26,7 +26,7 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { effectiveZoneIdAt, type ChainReservation } from '../common/vehicle-location';
-import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/travel-time';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../common/travel/travel-time';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 
 /** 탁송 준비 버퍼 — 직전 반납 후 기사 배정·출발 준비 시간 */

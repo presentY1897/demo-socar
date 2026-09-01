@@ -19,7 +19,7 @@ import {
   type ReservationBookingPort,
 } from '../ports/reservation-booking.port';
 import { rankCandidates, type CandidateInput } from './scoring';
-import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../../dispatch/travel/travel-time';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../../common/travel/travel-time';
 
 /**
  * 배차 추천/승인. biz 컨텍스트 안의 서비스라 소비자 도메인 **서비스**는 직접 부르지 않고

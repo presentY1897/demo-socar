@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PaymentsModule } from '../payments/payments.module';
-import { TravelModule } from '../dispatch/travel/travel.module';
+import { TravelModule } from '../common/travel/travel.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
 
