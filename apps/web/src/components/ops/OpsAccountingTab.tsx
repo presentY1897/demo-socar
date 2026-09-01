@@ -118,7 +118,7 @@ export function OpsAccountingTab() {
         />
       </div>
 
-      <AccountingCharts daily={daily ?? []} />
+      <AccountingCharts daily={daily ?? []} loading={!daily} />
     </div>
   );
 }

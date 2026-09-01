@@ -11,6 +11,7 @@ import {
   taskDeliveryOpen,
   taskRepositionUpcoming,
 } from '@/test/msw/fixtures';
+import { chartInstances } from '@/test/chart';
 import { stubEventSource } from '@/test/sse';
 import {
   MOCK_USERS,
@@ -22,13 +23,9 @@ import {
 
 vi.mock('@/components/ZoneMap', () => ({ default: () => <div data-testid="ops-map" /> }));
 
-// 차트는 캔버스/폭 측정에 의존한다. 여기 관심사는 "회계 값이 API 그대로인가"라
-// 차트는 대역으로 두고, M4-1이 갈아 끼울 지점도 이 한 곳으로 남는다.
-vi.mock('@/components/ops/AccountingCharts', () => ({
-  AccountingCharts: ({ daily }: { daily: { day: string }[] }) => (
-    <div data-testid="accounting-charts">{daily.length}일</div>
-  ),
-}));
+// 차트는 jsdom에 없는 캔버스 2D 컨텍스트를 요구한다 — 픽셀을 칠하는 부분만 대역으로 세우면
+// 회계/배차 화면이 실제 래퍼(ChartCanvas)를 통해 무엇을 그리는지 설정 객체로 확인할 수 있다.
+vi.mock('@/components/charts/chart-lib', async () => (await import('@/test/chart')).chartLibMock());
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -58,6 +55,19 @@ describe('운영 센터 — ③ 작업/배차', () => {
 
     const throughput = panel('핸들러별 오늘 처리량');
     expect(within(throughput).getByText(/오늘 완료/)).toBeInTheDocument();
+  });
+
+  it('처리량은 가로 누적 막대로도 그린다 (완료 + 진행 중)', async () => {
+    renderOps('tab=dispatch');
+
+    await screen.findByText('핸들러별 오늘 처리량');
+    await waitFor(() => expect(chartInstances()).toHaveLength(1));
+
+    const chart = chartInstances()[0].config;
+    expect(chart.type).toBe('bar');
+    expect(chart.options?.indexAxis).toBe('y'); // 이름이 길어 눕힌다
+    expect(chart.data.datasets.map((d) => d.label)).toEqual(['오늘 완료', '진행 중']);
+    expect(chart.data.labels).toEqual(['한기사']);
   });
 
   it('배정 모달은 서버가 준 추천 순서를 그대로 보여준다', async () => {
@@ -203,7 +213,10 @@ describe('운영 센터 — ⑥ 회계', () => {
     expect(await screen.findByText(`${metricsSummary.reservationCount}건`)).toBeInTheDocument();
     expect(screen.getByText(`${metricsSummary.utilizationPct}%`)).toBeInTheDocument();
     expect(screen.getByText(`${metricsSummary.lateReturnPct}%`)).toBeInTheDocument();
-    expect(screen.getByTestId('accounting-charts')).toHaveTextContent('14일');
+    // 일별 차트 2개(예약 막대 · 매출 선)가 지표 응답 14일치를 그대로 받는다
+    await waitFor(() => expect(chartInstances()).toHaveLength(2));
+    expect(chartInstances().map((c) => c.config.type)).toEqual(['bar', 'line']);
+    expect(chartInstances()[0].config.data.labels).toHaveLength(14);
   });
 
   it('기간을 바꾸면 매출 집계만 다시 묻는다 (비용은 월 고정비)', async () => {
@@ -230,7 +243,7 @@ describe('운영 센터 — ⑥ 회계', () => {
     expect(screen.queryByText(/매출/)).not.toBeInTheDocument();
     expect(screen.queryByText('손익')).not.toBeInTheDocument();
     expect(screen.queryByText('차량 가동률')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('accounting-charts')).not.toBeInTheDocument();
+    expect(chartInstances()).toHaveLength(0); // 운영 홈에는 차트가 없다
   });
 });
 

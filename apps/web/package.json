@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@socar/shared": "workspace:*",
+    "chart.js": "^4.4.7",
     "dayjs": "^1.11.13",
     "leaflet": "^1.9.4",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
-    "recharts": "^2.15.0",
     "swr": "^2.3.0"
   },
   "devDependencies": {

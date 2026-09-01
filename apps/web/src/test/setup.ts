@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
+import { resetCharts } from './chart';
 import { server } from './msw/server';
 
 // MSW 목 서버 — 테스트가 실제 API를 때리는 일이 없도록 요청을 전부 가로챈다.
@@ -10,6 +11,7 @@ afterEach(() => {
   server.resetHandlers();
   cleanup();
   localStorage.clear();
+  resetCharts(); // 차트 대역이 기록한 인스턴스 — 테스트 간에 새면 "몇 개 그렸나"가 어긋난다
 });
 afterAll(() => server.close());
 

@@ -24,6 +24,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `utils.tsx` | `renderWithProviders` — 세션·앱 라우터(경로·쿼리·동적 파라미터)·SWR 캐시 주입, `MOCK_USERS` |
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 | `sse.ts` | SSE 대역 — `stubEventSource()` · `lastEventSource().emit(payload)` |
+| `chart.ts` | Chart.js 대역 — `chartLibMock()` · `chartInstances()`/`lastChart()`/`liveCharts()` |
 
 ## 쓰는 법
 
@@ -146,6 +147,22 @@ stubEventSource();
 renderWithProviders(<DashboardPage />, { user: MOCK_USERS.opsAdmin });
 lastEventSource().emit(liveTick({ lat: 37.51, lng: 127.04 })); // 한 틱 보내기
 ```
+
+## 차트(Chart.js)
+
+jsdom에는 캔버스 2D 컨텍스트가 없어 실제 `Chart`는 마운트되지 않는다. 화면이 'chart.js'를 직접
+import하지 않고 [`components/charts/chart-lib.ts`](../components/charts/chart-lib.ts) 하나만 보게
+해 뒀으니, 그 모듈만 대역으로 세우면 설정 빌더(`lib/chart-config.ts`)와 래퍼(`ChartCanvas`)는
+실제 코드가 그대로 돈다 — 축 포맷·계열·빈 데이터 처리를 이미지가 아니라 **설정 객체**로 검증한다.
+
+```tsx
+vi.mock('@/components/charts/chart-lib', async () => (await import('@/test/chart')).chartLibMock());
+
+renderWithProviders(<DashboardPage />, { user: MOCK_USERS.opsAdmin, searchParams: 'tab=accounting' });
+expect(chartInstances()[0].config.data.labels).toEqual(['1/1', '1/2']);
+```
+
+기록은 `setup.ts`가 테스트마다 비운다(`resetCharts()`).
 
 ## 동적 라우트 화면 — `useParams()`로 통일 (규약)
 

@@ -7,6 +7,7 @@ import {
   HANDLER_TASK_TYPE_META,
   type HandlerTaskRes,
 } from '@socar/shared';
+import { ChartCanvas } from '@/components/charts/ChartCanvas';
 import { swrFetcher } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
 import { buildTaskBoard } from '@/lib/ops-tasks';
@@ -93,8 +94,29 @@ export function OpsDispatchTab() {
       </Panel>
 
       <Panel title="핸들러별 오늘 처리량">
+        {/*
+          누가 얼마나 쥐고 있는지는 숫자 목록보다 길이 비교가 빠르다 (M4-1 래퍼 적용 지점).
+          완료와 진행 중을 한 막대에 쌓아 "오늘 이 사람에게 걸린 총량"을 함께 읽게 한다.
+        */}
+        <div className="mt-2">
+          <ChartCanvas
+            kind="bar"
+            horizontal
+            stacked
+            unit="count"
+            labels={board.throughput.map((h) => h.name)}
+            series={[
+              { label: '오늘 완료', data: board.throughput.map((h) => h.doneToday) },
+              { label: '진행 중', data: board.throughput.map((h) => h.active) },
+            ]}
+            loading={!data}
+            height={Math.max(120, board.throughput.length * 36 + 48)}
+            ariaLabel="핸들러별 오늘 처리량 차트"
+            emptyText="오늘 배정된 핸들러가 없어요"
+          />
+        </div>
+        {/* 막대 길이로는 정확한 값을 못 읽는다 — 같은 데이터를 숫자로도 남긴다 */}
         <ul className="mt-2 divide-y divide-gray-50">
-          {board.throughput.length === 0 && <Empty>오늘 배정된 핸들러가 없어요</Empty>}
           {board.throughput.map((h) => (
             <li key={h.handlerId} className="flex items-center justify-between py-1.5 text-sm">
               <span>{h.name}</span>

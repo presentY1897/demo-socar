@@ -1,70 +1,57 @@
 'use client';
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import type { MetricsDailyRowRes } from '@socar/shared';
+import { ChartCanvas } from '@/components/charts/ChartCanvas';
+import { CHART_COLORS, dayTickLabel } from '@/lib/chart-config';
+import { Panel } from './primitives';
 
 /**
- * 회계 탭의 일별 차트 — **M4-1이 통째로 갈아 끼울 지점**.
+ * 회계 탭의 일별 차트 — M4-1에서 Recharts를 걷어내고 공용 래퍼(`ChartCanvas`)로 갈아 끼웠다.
  *
- * M3-6은 기존 `/dashboard`의 Recharts 차트를 그대로 옮기기만 했다(작업 문서 지시).
- * Chart.js 전면 전환(M4-1)에서 Recharts를 제거할 때 손댈 파일이 이 하나가 되도록
- * 차트만 여기에 모았다 — 바깥(손익 카드·비용 구성·지표)에는 차트 라이브러리가 없다.
+ * 예약은 하루 단위로 세는 값이라 막대, 매출은 흐름을 보는 값이라 선으로 둔다.
+ * 매출 축은 래퍼가 만/억으로 접어 주므로 제목에서 "(만원)"을 뗐다 — 단위를 제목에 적어 두면
+ * 축 눈금이 바뀌었을 때 제목만 옛 단위로 남는다.
  */
-export function AccountingCharts({ daily }: { daily: MetricsDailyRowRes[] }) {
-  const chartData = daily.map((d) => ({
-    ...d,
-    label: d.day.slice(5).replace('-', '/'),
-    revenueMan: Math.round(d.revenueKrw / 10000),
-  }));
+export function AccountingCharts({
+  daily,
+  loading,
+}: {
+  daily: MetricsDailyRowRes[];
+  loading?: boolean;
+}) {
+  const labels = daily.map((d) => dayTickLabel(d.day));
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">일별 예약 건수</h2>
-        <div className="mt-2 h-48">
-          <ResponsiveContainer>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" fontSize={10} tickLine={false} />
-              <YAxis fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="reservations" name="예약" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      <Panel title="일별 예약 건수">
+        <div className="mt-2">
+          <ChartCanvas
+            kind="bar"
+            labels={labels}
+            unit="count"
+            series={[{ label: '예약', data: daily.map((d) => d.reservations) }]}
+            loading={loading}
+            ariaLabel="일별 예약 건수 차트"
+            emptyText="아직 집계된 예약이 없어요"
+          />
         </div>
-      </div>
+      </Panel>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">일별 매출 (만원)</h2>
-        <div className="mt-2 h-48">
-          <ResponsiveContainer>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" fontSize={10} tickLine={false} />
-              <YAxis fontSize={10} tickLine={false} axisLine={false} />
-              <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="revenueMan"
-                name="매출(만원)"
-                stroke="#6366f1"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+      <Panel title="일별 매출">
+        <div className="mt-2">
+          <ChartCanvas
+            kind="line"
+            labels={labels}
+            unit="krw"
+            series={[
+              { label: '매출', data: daily.map((d) => d.revenueKrw), color: CHART_COLORS[1] },
+            ]}
+            loading={loading}
+            ariaLabel="일별 매출 차트"
+            emptyText="아직 집계된 매출이 없어요"
+          />
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }
