@@ -10,6 +10,7 @@ import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/li
 import { fromParts, TIMES_10MIN, toDatePart, toTimePart } from '@/lib/timerange';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { ConditionReportForm, ConditionReportSummary } from '@/components/ConditionReportForm';
+import { IncidentForm } from '@/components/IncidentForm';
 import { SmartKeyPanel } from '@/components/SmartKeyPanel';
 
 interface Detail {
@@ -248,6 +249,9 @@ export default function ReservationDetailPage({ params }: { params: Promise<{ id
                     </button>
                   </div>
                 )}
+                <div className="mt-3 border-t border-dashed pt-3">
+                  <IncidentForm rentalId={rental.id} />
+                </div>
               </>
             )}
           </Step>

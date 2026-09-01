@@ -3,10 +3,12 @@ import { z } from 'zod';
 import {
   checkInSchema,
   checkOutSchema,
+  createIncidentSchema,
   extendRentalSchema,
   vehicleControlSchema,
   type CheckInDto,
   type CheckOutDto,
+  type CreateIncidentDto,
   type ExtendRentalDto,
   type VehicleControlDto,
 } from '@socar/shared';
@@ -57,6 +59,16 @@ export class RentalsController {
     @Body(new ZodValidationPipe(vehicleControlSchema)) dto: VehicleControlDto,
   ) {
     return this.rentals.control(user, id, dto);
+  }
+
+  /** 사고 접수(모의) — 응답에 가입 면책상품·자기부담금과 모의 보험사 안내가 실린다 */
+  @Post(':id/incident')
+  incident(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createIncidentSchema)) dto: CreateIncidentDto,
+  ) {
+    return this.rentals.incident(user, id, dto);
   }
 
   /** 단계형 화면이 현재 단계를 판단하는 이용 상태 요약 */

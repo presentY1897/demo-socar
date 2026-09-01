@@ -19,6 +19,7 @@ const NAV = [
     icon: '📋',
     show: (role?: string) => role === 'CORP_ADMIN',
   },
+  { href: '/inquiries', label: '문의', icon: '💬', show: (role?: string) => !!role },
   { href: '/dashboard', label: '지표', icon: '📊', show: (role?: string) => role === 'OPS_ADMIN' },
 ];
 

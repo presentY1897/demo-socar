@@ -7,6 +7,8 @@ import {
   quoteBreakdownSchema,
   quote,
   applyControl,
+  incidentResultSchema,
+  inquirySchema,
   rentalSchema,
   rentalUsageSchema,
   reservationSchema,
@@ -24,6 +26,9 @@ import {
   rentalCompleted,
   rentalInUse,
   reservationConfirmed,
+  incidentResultFull,
+  inquiryAnswered,
+  inquiryOpen,
   reservationInUse,
   smartKeyLocked,
   usageEmpty,
@@ -160,6 +165,15 @@ export const handlers = [
   http.post(url('/rentals/:id/extend'), () => json(rentalSchema, rentalInUse, 201)),
 
   http.post(url('/rentals/:id/settle'), () => json(rentalSchema, rentalCompleted, 201)),
+
+  // ── 문의 / 사고 접수 ────────────────────────────
+  http.get(url('/me/inquiries'), () =>
+    HttpResponse.json([inquiryOpen, inquiryAnswered].map((i) => inquirySchema.parse(i))),
+  ),
+
+  http.post(url('/inquiries'), () => json(inquirySchema, inquiryOpen, 201)),
+
+  http.post(url('/rentals/:id/incident'), () => json(incidentResultSchema, incidentResultFull, 201)),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

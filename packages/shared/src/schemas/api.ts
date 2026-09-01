@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { conditionPhaseSchema } from './condition';
 import { vehicleControlActionSchema } from './control';
+import { incidentStatusSchema, insuranceCoverageSchema } from './incident';
+import { inquiryCategorySchema, inquiryStatusSchema } from './inquiry';
 import { storedPhotoSchema } from './photo';
 import { insuranceTierSchema } from './reservation';
 
@@ -244,3 +246,44 @@ export const couponSchema = z.object({
 
 /** `GET /me/credit` */
 export const creditSchema = z.object({ balanceKrw: z.number().int() });
+
+// ─────────────────────── 문의 / 사고 접수 ───────────────────────
+
+/** `POST /inquiries` · `GET /me/inquiries` 의 원소 */
+export const inquirySchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  vehicleId: z.string().nullable(),
+  rentalId: z.string().nullable(),
+  category: inquiryCategorySchema,
+  body: z.string(),
+  status: inquiryStatusSchema,
+  answer: z.string().nullable(),
+  answeredAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type InquiryRes = z.infer<typeof inquirySchema>;
+
+export const incidentReportSchema = z.object({
+  id: z.string(),
+  rentalId: z.string(),
+  description: z.string(),
+  status: incidentStatusSchema,
+  createdAt: z.string(),
+  photos: z.array(storedPhotoSchema),
+});
+
+/**
+ * `POST /rentals/:id/incident` — 접수 결과 + 가입 면책상품 안내.
+ * 사고 접수 직후 "내 자기부담금이 얼마인지"를 바로 보여주는 게 이 응답의 목적이다.
+ */
+export const incidentResultSchema = z.object({
+  incident: incidentReportSchema,
+  insurance: insuranceCoverageSchema,
+  insurer: z.object({
+    name: z.string(),
+    phone: z.string(),
+    steps: z.array(z.string()),
+  }),
+});
+export type IncidentResultRes = z.infer<typeof incidentResultSchema>;

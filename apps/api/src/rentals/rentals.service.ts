@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import {
   applyControl,
+  insuranceCoverage,
+  MOCK_INSURER,
   quote,
   settle,
   validateSlotRange,
@@ -14,7 +16,9 @@ import {
   type CheckOutDto,
   type ConditionPhaseValue,
   type ConditionReportRes,
+  type CreateIncidentDto,
   type ExtendRentalDto,
+  type IncidentResultRes,
   type RentalUsageRes,
   type SmartKeyStateRes,
   type VehicleControlDto,
@@ -372,6 +376,48 @@ export class RentalsService {
         },
       };
     });
+  }
+
+  /**
+   * 사고 접수(모의) — 접수를 남기고 가입 면책상품의 자기부담금을 그 자리에서 알려준다.
+   *
+   * 상태 게이트를 두지 않는다: 사고는 반납 뒤에 발견되기도 하고, 접수 시점을 막아서
+   * 얻을 게 없다. 대신 본인 대여인지는 확인한다(403).
+   */
+  async incident(
+    user: JwtUser,
+    rentalId: string,
+    dto: CreateIncidentDto,
+  ): Promise<IncidentResultRes> {
+    const rental = await this.ownedRental(this.prisma, user, rentalId);
+
+    const incident = await this.prisma.incidentReport.create({
+      data: {
+        rentalId,
+        description: dto.description,
+        photos: { create: toPhotoRows(dto.photos) },
+      },
+      include: { photos: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    return {
+      incident: {
+        id: incident.id,
+        rentalId: incident.rentalId,
+        description: incident.description,
+        status: incident.status,
+        createdAt: incident.createdAt.toISOString(),
+        photos: toStoredPhotos(incident.photos),
+      },
+      // 면책 보장은 결제 시점 스냅샷(reservation.insurance)에서 파생한다 —
+      // 나중에 상품이 개편돼도 그때 가입한 조건으로 안내된다
+      insurance: insuranceCoverage(rental.reservation.insurance),
+      insurer: {
+        name: MOCK_INSURER.name,
+        phone: MOCK_INSURER.phone,
+        steps: [...MOCK_INSURER.steps],
+      },
+    };
   }
 
   private async smartKeyState(

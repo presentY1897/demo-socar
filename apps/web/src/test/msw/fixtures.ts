@@ -5,13 +5,19 @@ import {
   paymentSchema,
   pricingPlanSchema,
   rentalSchema,
+  incidentResultSchema,
+  inquirySchema,
   rentalUsageSchema,
   reservationSchema,
   smartKeyStateSchema,
   vehicleSummarySchema,
   zoneDetailSchema,
   zoneMarkerSchema,
+  INSURANCE_META,
+  MOCK_INSURER,
   type ConditionReportRes,
+  type IncidentResultRes,
+  type InquiryRes,
   type RentalUsageRes,
   type ReservationRes,
   type ZoneDetailRes,
@@ -293,4 +299,53 @@ export const usageCheckedOut: RentalUsageRes = make(rentalUsageSchema, {
   ...usageEmpty,
   checkIn: conditionCheckIn,
   checkOut: conditionCheckOut,
+});
+
+// ─────────────────────── 문의 / 사고 접수 ───────────────────────
+
+export const inquiryOpen: InquiryRes = make(inquirySchema, {
+  id: 'inquiry-1',
+  userId: userPersonal.id,
+  vehicleId: vehicleAvante.id,
+  rentalId: null,
+  category: 'VEHICLE',
+  body: '블루투스 연결이 되지 않습니다',
+  status: 'OPEN',
+  answer: null,
+  answeredAt: null,
+  createdAt: '2030-01-02T04:00:00.000Z',
+});
+
+export const inquiryAnswered: InquiryRes = make(inquirySchema, {
+  ...inquiryOpen,
+  id: 'inquiry-2',
+  category: 'RETURN',
+  body: '반납 후 정산 금액이 예상과 다릅니다',
+  status: 'ANSWERED',
+  answer: '주행 30km 초과분이 함께 청구되었습니다. 상세 내역을 메일로 보내드렸어요',
+  answeredAt: '2030-01-02T05:00:00.000Z',
+  createdAt: '2030-01-01T09:00:00.000Z',
+});
+
+/** 완전보장(FULL) 예약의 사고 접수 결과 — 자기부담금 0원 안내 */
+export const incidentResultFull: IncidentResultRes = make(incidentResultSchema, {
+  incident: {
+    id: 'incident-1',
+    rentalId: rentalInUse.id,
+    description: '주차장에서 후진하다 뒤 범퍼가 기둥에 닿았습니다',
+    status: 'RECEIVED',
+    createdAt: '2030-01-02T02:00:00.000Z',
+    photos: [storedPhoto('photo-incident-1')],
+  },
+  insurance: {
+    tier: 'FULL',
+    label: INSURANCE_META.FULL.label,
+    deductibleKrw: INSURANCE_META.FULL.deductibleKrw,
+    description: INSURANCE_META.FULL.description,
+  },
+  insurer: {
+    name: MOCK_INSURER.name,
+    phone: MOCK_INSURER.phone,
+    steps: [...MOCK_INSURER.steps],
+  },
 });

@@ -7,5 +7,7 @@ export * from './schemas/auth';
 export * from './schemas/condition';
 export * from './schemas/control';
 export * from './schemas/dispatch';
+export * from './schemas/incident';
+export * from './schemas/inquiry';
 export * from './schemas/photo';
 export * from './schemas/reservation';

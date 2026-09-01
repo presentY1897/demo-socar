@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { HealthController } from './health.controller';
+import { InquiriesModule } from './inquiries/inquiries.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,6 +23,7 @@ import { ZonesModule } from './zones/zones.module';
     RentalsModule,
     PaymentsModule,
     DispatchModule,
+    InquiriesModule,
     MetricsModule,
   ],
   controllers: [HealthController],
