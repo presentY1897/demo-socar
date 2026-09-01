@@ -81,7 +81,7 @@
 | ☑ | [M3-4](task/m3-4-home-fleet-tabs.md) | 운영 홈 + Fleet 탭 UI — 경고 피드·실시간 지도·차량 등록 | M3-3 |
 | ☑ | [M3-5](task/m3-5-contract-customer-tabs.md) | 존/계약 + 고객 탭 UI — 잔여 자리·유의 유저·문의함 | M3-3 |
 | ☑ | [M3-6](task/m3-6-dispatch-accounting-tabs.md) | 작업/배차 + 회계 탭 UI — 배정 화면·손익 격리 | M3-3 |
-| ☐ | [M3-7](task/m3-7-verify-deploy.md) | 검증·문서·배포 — ADR-009, 6탭 완주 | M3-4~6 |
+| ☑ | [M3-7](task/m3-7-verify-deploy.md) | 검증·문서·배포 — ADR-009, 6탭 완주 | M3-4~6 |
 
 ## M4 — 지표·차트·Export (M · 5개)
 

@@ -49,4 +49,4 @@
 
 ## 참고
 
-- [project-review.md](../project-review.md) §5.4 · 설계 이유는 ADR-009(M3-7)에 기록
+- [project-review.md](../project-review.md) §5.4 · 설계 이유는 [ADR-009](../adr/009-ops-backoffice-telemetry.md)(M3-7)에 기록

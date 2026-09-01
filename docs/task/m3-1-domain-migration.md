@@ -57,4 +57,4 @@ M1-1 스키마 주석의 예고대로 `VehicleTelemetry`로 이관하고 Vehicle
 
 ## 참고
 
-- [project-review.md](../project-review.md) §5.4 신규 도메인 표
+- [project-review.md](../project-review.md) §5.4 신규 도메인 표 · 이관 근거는 [ADR-009](../adr/009-ops-backoffice-telemetry.md) 결정 4

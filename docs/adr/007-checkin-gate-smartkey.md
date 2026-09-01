@@ -158,3 +158,5 @@ DB가 감당할 수 있는 크기로 눌렀다:
   체크아웃 → 반납·정산까지 한 예약으로 완주하며 위 게이트를 동선 안에서 다시 확인한다
 - `Vehicle.doorLocked`/`engineOn`은 M3-1에서 `VehicleTelemetry`로 통합될 임시 필드다.
   그때 상태 머신(`applyControl`)은 그대로 두고 상태의 저장 위치만 옮긴다
+  → **M3-1에서 예고대로 이관 완료.** 응답 계약(`SmartKeyStateRes`)이 그대로라 화면은 무변경
+  ([ADR-009](009-ops-backoffice-telemetry.md) 결정 4)
