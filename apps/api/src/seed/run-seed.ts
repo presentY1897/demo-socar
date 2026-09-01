@@ -1,13 +1,14 @@
 /**
  * 데모 시드 데이터.
  * - 전국 주요 도시의 존/차량 (region 키는 도로망 그래프 파일과 매칭)
- * - 데모 계정 6종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
+ * - 데모 계정 7종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
  * - 지표/배차 리스크 계산용 과거 이용 이력 (결정적 난수로 재현 가능)
  */
-import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus } from '@prisma/client';
+import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus, HandlerTaskType, HandlerTaskStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DELIVERY_MIN_LEAD_MINUTES } from '@socar/shared';
 import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
 
 /**
@@ -18,8 +19,9 @@ import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
  *   v3: 이용 플로우 도메인 추가 (체크인/아웃·스마트키·문의·사고) — 재시드 시 신규 테이블도 함께 초기화
  *   v4: 법인 등급(corpGrade) 부여 + 리스 계약(LeaseContract) + viewer 계정
  *   v5: approver 계정 추가 — 등급 4종을 계정 스위칭만으로 시연할 수 있게
+ *   v6: 핸들러 도메인 추가 (HANDLER 계정 + 부름 배달/회수·재배치 샘플 작업)
  */
-export const SEED_VERSION = 5;
+export const SEED_VERSION = 6;
 
 interface ZoneDef {
   name: string;
@@ -80,6 +82,8 @@ export async function runSeed(prisma: PrismaClient) {
 
   // ── 초기화 (역순 삭제) ──
   await prisma.$transaction([
+    prisma.handlerTaskPhoto.deleteMany(),
+    prisma.handlerTask.deleteMany(),
     prisma.dispatchCandidate.deleteMany(),
     prisma.dispatchRequest.deleteMany(),
     prisma.incidentPhoto.deleteMany(),
@@ -132,7 +136,7 @@ export async function runSeed(prisma: PrismaClient) {
   // ── 존 (전국) — 실데이터(data/zones.json) 우선, region은 도로망 그래프 키 ──
   const zoneDefs = loadZoneDefs();
 
-  const zones = [] as { id: string; name: string }[];
+  const zones = [] as { id: string; name: string; lat: number; lng: number }[];
   for (const z of zoneDefs) {
     zones.push(await prisma.zone.create({ data: z }));
   }
@@ -182,7 +186,8 @@ export async function runSeed(prisma: PrismaClient) {
   // 법인 계정은 Role(전역 역할) + corpGrade(법인 내 등급)를 함께 갖는다.
   // 등급→권한 판정은 packages/shared 의 CORP_PERMISSIONS 가 단일 소스.
   const passwordHash = await bcrypt.hash('demo1234', 10);
-  const [user, corpMember, corpAdmin] = await Promise.all([
+  // 4번째(운영 어드민)는 뒤에서 참조하지 않아 비워 둔다
+  const [user, corpMember, corpAdmin, , handler] = await Promise.all([
     prisma.user.create({
       data: { email: 'user@demo.mocar.kr', name: '김소카', role: Role.USER, passwordHash },
     }),
@@ -202,6 +207,9 @@ export async function runSeed(prisma: PrismaClient) {
     }),
     prisma.user.create({
       data: { email: 'ops@demo.mocar.kr', name: '최운영', role: Role.OPS_ADMIN, passwordHash },
+    }),
+    prisma.user.create({
+      data: { email: 'handler@demo.mocar.kr', name: '한기사', role: Role.HANDLER, passwordHash },
     }),
   ]);
 
@@ -392,6 +400,132 @@ export async function runSeed(prisma: PrismaClient) {
     }
   }
 
+  // ── 핸들러 샘플 작업 (M2-1) ──
+  // 로그인 직후 "미배정 공개 작업 수락 → 내 작업 진행" 흐름이 바로 보이도록
+  // 미배정 2건(배달·재배치)과 배정 1건(회수)을 만든다.
+  // M2-2가 붙으면 배달/회수 작업은 부름 예약의 생명주기에서 자동으로 생성된다.
+  const taskZones = zones.filter((z) => vehicles.some((v) => v.zoneId === z.id));
+  const vehicleInZone = (zoneId: string) => vehicles.find((v) => v.zoneId === zoneId)!;
+  /** 지금 기준 오프셋의 10분 슬롯 */
+  const slot = (offsetMinutes: number) => {
+    const t = new Date(Date.now() + offsetMinutes * 60 * 1000);
+    t.setSeconds(0, 0);
+    t.setMinutes(Math.floor(t.getMinutes() / 10) * 10);
+    return t;
+  };
+  let taskCount = 0;
+
+  if (taskZones.length >= 2) {
+    // ① 부름 배달 — 3시간 뒤 시작하는 부름 예약, 아직 담당자가 없다(공개 작업)
+    const deliveryZone = taskZones[0];
+    const deliveryVehicle = vehicleInZone(deliveryZone.id);
+    const deliveryStartAt = slot(180);
+    const deliveryPoint = {
+      lat: Math.round((deliveryZone.lat + 0.004) * 1e6) / 1e6,
+      lng: Math.round((deliveryZone.lng + 0.004) * 1e6) / 1e6,
+      label: `${deliveryZone.name} 인근 아파트 정문`,
+    };
+    const deliveryResv = await prisma.reservation.create({
+      data: {
+        userId: user.id,
+        vehicleId: deliveryVehicle.id,
+        startAt: deliveryStartAt,
+        endAt: new Date(deliveryStartAt.getTime() + 3 * 3600 * 1000),
+        status: ReservationStatus.CONFIRMED,
+        insurance: InsuranceTier.STANDARD,
+        deliveryLat: deliveryPoint.lat,
+        deliveryLng: deliveryPoint.lng,
+        deliveryLabel: deliveryPoint.label,
+        rentalFeeKrw: 18000, insuranceFeeKrw: 4200, deliveryFeeKrw: 6000, totalUpfrontKrw: 28200,
+        payments: {
+          create: [{
+            kind: PaymentKind.UPFRONT, amountKrw: 28200, status: PaymentStatus.CAPTURED,
+            idempotencyKey: 'seed-handler-delivery', cardLast4: '4242', approvedAt: new Date(),
+          }],
+        },
+      },
+    });
+    await prisma.handlerTask.create({
+      data: {
+        type: HandlerTaskType.DELIVERY,
+        status: HandlerTaskStatus.PENDING,
+        reservationId: deliveryResv.id,
+        vehicleId: deliveryVehicle.id,
+        fromZoneId: deliveryZone.id,
+        toLat: deliveryPoint.lat, toLng: deliveryPoint.lng, toLabel: deliveryPoint.label,
+        // 이용 시작 − 리드타임(ADR-006): 이 시각까지 수령지에 차를 대야 한다
+        dueAt: new Date(deliveryStartAt.getTime() - DELIVERY_MIN_LEAD_MINUTES * 60 * 1000),
+      },
+    });
+    taskCount++;
+
+    // ② 부름 회수 — 방금 끝난 이용, 핸들러에게 이미 배정된 상태
+    const retrieveZone = taskZones[1];
+    const retrieveVehicle = vehicleInZone(retrieveZone.id);
+    const retrieveEndAt = slot(-10);
+    const retrieveStartAt = new Date(retrieveEndAt.getTime() - 3 * 3600 * 1000);
+    const retrievePoint = {
+      lat: Math.round((retrieveZone.lat - 0.003) * 1e6) / 1e6,
+      lng: Math.round((retrieveZone.lng + 0.003) * 1e6) / 1e6,
+      label: `${retrieveZone.name} 인근 주민센터 앞`,
+    };
+    const retrieveResv = await prisma.reservation.create({
+      data: {
+        userId: user.id,
+        vehicleId: retrieveVehicle.id,
+        startAt: retrieveStartAt,
+        endAt: retrieveEndAt,
+        status: ReservationStatus.COMPLETED,
+        insurance: InsuranceTier.LIGHT,
+        deliveryLat: retrievePoint.lat,
+        deliveryLng: retrievePoint.lng,
+        deliveryLabel: retrievePoint.label,
+        rentalFeeKrw: 18000, insuranceFeeKrw: 2100, deliveryFeeKrw: 6000, totalUpfrontKrw: 26100,
+        createdAt: new Date(retrieveStartAt.getTime() - 2 * 3600 * 1000),
+        rental: {
+          create: {
+            status: RentalStatus.COMPLETED,
+            startedAt: retrieveStartAt, returnedAt: retrieveEndAt,
+            distanceKm: 24.6, lateMinutes: 0, driveFeeKrw: 4920, lateFeeKrw: 0,
+          },
+        },
+      },
+    });
+    await prisma.handlerTask.create({
+      data: {
+        type: HandlerTaskType.RETRIEVE,
+        status: HandlerTaskStatus.ASSIGNED,
+        reservationId: retrieveResv.id,
+        vehicleId: retrieveVehicle.id,
+        // 회수는 수령지(좌표)에서 출발해 원래 존으로 되돌린다 — 제자리 회수(ADR-006)
+        fromZoneId: retrieveZone.id,
+        fromLat: retrievePoint.lat, fromLng: retrievePoint.lng, fromLabel: retrievePoint.label,
+        toZoneId: retrieveZone.id,
+        assigneeId: handler.id,
+        assignedAt: new Date(),
+        dueAt: slot(50),
+      },
+    });
+    taskCount++;
+
+    // ③ 재배치 — 운영자가 낸 존 간 이동 작업 (공개, 오늘 중 처리)
+    const repositionFrom = taskZones[2] ?? taskZones[0];
+    const repositionTo = taskZones[3] ?? taskZones[1];
+    if (repositionFrom.id !== repositionTo.id) {
+      await prisma.handlerTask.create({
+        data: {
+          type: HandlerTaskType.REPOSITION,
+          status: HandlerTaskStatus.PENDING,
+          vehicleId: vehicleInZone(repositionFrom.id).id,
+          fromZoneId: repositionFrom.id,
+          toZoneId: repositionTo.id,
+          dueAt: slot(8 * 60),
+        },
+      });
+      taskCount++;
+    }
+  }
+
   await prisma.seedMeta.upsert({
     where: { id: 1 },
     create: { id: 1, version: SEED_VERSION },
@@ -408,7 +542,7 @@ export async function runSeed(prisma: PrismaClient) {
 
   const leaseCount = await prisma.leaseContract.count();
   console.log(
-    `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}, leases=${leaseCount}`,
+    `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}, leases=${leaseCount}, handlerTasks=${taskCount}`,
   );
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr     개인 이용자');
@@ -417,5 +551,6 @@ export async function runSeed(prisma: PrismaClient) {
   console.log('  approver@demo.mocar.kr 법인 임직원 (등급 APPROVER — 승인/보드)');
   console.log('  admin@demo.mocar.kr    법인 배차 담당 (등급 MANAGER — 멤버/플릿 관리)');
   console.log('  ops@demo.mocar.kr      운영 어드민');
+  console.log('  handler@demo.mocar.kr  핸들러(운송기사)');
 }
 

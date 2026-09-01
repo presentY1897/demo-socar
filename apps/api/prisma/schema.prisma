@@ -24,6 +24,7 @@ enum Role {
   CORP_MEMBER // 법인 임직원
   CORP_ADMIN // 법인 배차 담당자
   OPS_ADMIN // 쏘카 운영 어드민
+  HANDLER // 핸들러(운송기사) — 부름 배달·회수·재배치 수행
 }
 
 // 법인 내 등급 (MOCAR 비즈니스) — Role은 서비스 전역 역할, 등급은 법인 안에서의 권한 세분화.
@@ -53,6 +54,7 @@ model User {
   dispatchDecided  DispatchRequest[] @relation("decider")
   inquiries        Inquiry[]
   leaseRequests    LeaseContract[]   @relation("leaseRequester")
+  handlerTasks     HandlerTask[]     @relation("assignee") // 핸들러로 배정받은 작업
 }
 
 model Corporation {
@@ -81,9 +83,11 @@ model Zone {
   capacity      Int
   corporationId String? // 값이 있으면 기업 전용존 — 일반 이용자에게 비노출
 
-  corporation Corporation?  @relation(fields: [corporationId], references: [id])
-  vehicles    Vehicle[]
-  onewayReturns Reservation[] @relation("returnZone") // 이 존으로 반납되는 편도 예약
+  corporation      Corporation?  @relation(fields: [corporationId], references: [id])
+  vehicles         Vehicle[]
+  onewayReturns    Reservation[] @relation("returnZone") // 이 존으로 반납되는 편도 예약
+  handlerTasksFrom HandlerTask[] @relation("taskFromZone")
+  handlerTasksTo   HandlerTask[] @relation("taskToZone")
 }
 
 model PricingPlan {
@@ -135,6 +139,7 @@ model Vehicle {
   controlLogs        VehicleControlLog[]
   inquiries          Inquiry[]
   leaseContracts     LeaseContract[]
+  handlerTasks       HandlerTask[]
 }
 
 // ─────────────────────────── 예약 / 대여 ───────────────────────────
@@ -180,13 +185,14 @@ model Reservation {
   createdAt  DateTime  @default(now())
   canceledAt DateTime?
 
-  user       User    @relation(fields: [userId], references: [id])
-  vehicle    Vehicle @relation(fields: [vehicleId], references: [id])
-  returnZone Zone?   @relation("returnZone", fields: [returnZoneId], references: [id])
-  coupon     Coupon? @relation(fields: [couponId], references: [id])
-  payments Payment[]
-  rental   Rental?
-  dispatch DispatchRequest?
+  user         User             @relation(fields: [userId], references: [id])
+  vehicle      Vehicle          @relation(fields: [vehicleId], references: [id])
+  returnZone   Zone?            @relation("returnZone", fields: [returnZoneId], references: [id])
+  coupon       Coupon?          @relation(fields: [couponId], references: [id])
+  payments     Payment[]
+  rental       Rental?
+  dispatch     DispatchRequest?
+  handlerTasks HandlerTask[] // 부름 배달/회수 작업 (M2-2에서 자동 생성)
 
   // 시간 겹침 방지는 마이그레이션의 EXCLUDE USING GIST 제약이 최종 방어선
   @@index([vehicleId, startAt])
@@ -503,4 +509,82 @@ model LeaseContract {
 
   @@index([corporationId, status])
   @@index([vehicleId, status])
+// ─────────────────────────── 핸들러(운송기사) 작업 ───────────────────────────
+
+enum HandlerTaskType {
+  DELIVERY // 부름 배달 — 존 → 수령지(좌표)
+  RETRIEVE // 부름 회수 — 수령지(좌표) → 원래 존 (제자리 회수, ADR-006)
+  REPOSITION // 재배치 — 존 → 존 (운영자가 수동 생성)
+}
+
+enum HandlerTaskStatus {
+  PENDING // 미배정 — 핸들러가 직접 수락하거나 운영자가 배정
+  ASSIGNED // 담당 핸들러 확정, 출발 전
+  EN_ROUTE // 이동 중
+  DONE // 완료 (인계 사진 + 메모)
+  CANCELED // 예약 취소 등으로 무효화
+}
+
+/**
+ * 핸들러가 현장에서 수행하는 작업 1건.
+ * 출발은 언제나 존(fromZoneId)이 기준이지만 실제 픽업 지점이 좌표인 경우(부름 회수 —
+ * 이용자가 수령지에 세워 둔 차)가 있어 출발·도착 모두 존과 좌표 스냅샷을 함께 갖는다.
+ * 작업 카드/지도가 예약을 다시 조회하지 않고도 "출발 → 도착"을 그릴 수 있어야 하기 때문이다.
+ * 상태 전이 규칙은 packages/shared의 handler-task.ts 한 곳에만 둔다 (API·화면 공용).
+ */
+model HandlerTask {
+  id            String            @id @default(cuid())
+  type          HandlerTaskType
+  status        HandlerTaskStatus @default(PENDING)
+  reservationId String? // 부름 배달/회수는 예약에서 파생 — 재배치는 null
+  vehicleId     String
+  fromZoneId    String // 차량이 출발하는(회수·재배치는 되돌아갈) 존
+
+  // 출발이 존이 아닌 경우의 스냅샷 — 부름 회수의 수령지
+  fromLat   Float?
+  fromLng   Float?
+  fromLabel String?
+
+  // 목적지: 존(회수·재배치) 또는 좌표(부름 배달의 수령지)
+  toZoneId String?
+  toLat    Float?
+  toLng    Float?
+  toLabel  String?
+
+  assigneeId String? // 배정된 핸들러 (Role.HANDLER)
+  dueAt      DateTime @db.Timestamptz(3) // 이 시각까지 완료 — 지나면 목록에서 지연 표시
+
+  assignedAt     DateTime? // 배정·수락 시각
+  startedAt      DateTime? // 이동 시작 (EN_ROUTE)
+  completedAt    DateTime?
+  canceledAt     DateTime?
+  cancelReason   String?
+  completionNote String? // 인계 메모 — 완료 시 사진과 함께 필수
+  createdAt      DateTime  @default(now())
+
+  reservation Reservation?       @relation(fields: [reservationId], references: [id])
+  vehicle     Vehicle            @relation(fields: [vehicleId], references: [id])
+  fromZone    Zone               @relation("taskFromZone", fields: [fromZoneId], references: [id])
+  toZone      Zone?              @relation("taskToZone", fields: [toZoneId], references: [id])
+  assignee    User?              @relation("assignee", fields: [assigneeId], references: [id])
+  photos      HandlerTaskPhoto[]
+
+  @@index([assigneeId, status, dueAt]) // 핸들러 개인 큐 (오늘/예정, dueAt 순)
+  @@index([status, dueAt]) // 미배정 공개 작업 · 운영 배정 목록
+  @@index([reservationId]) // 예약 취소 시 연결 작업 정리
+  @@index([vehicleId, dueAt])
+}
+
+// ConditionPhoto와 같은 저장 규격(압축 base64) — 업로드 경로(M1-2)를 공유한다
+model HandlerTaskPhoto {
+  id        String   @id @default(cuid())
+  taskId    String
+  mime      String
+  data      String
+  bytes     Int
+  createdAt DateTime @default(now())
+
+  task HandlerTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }

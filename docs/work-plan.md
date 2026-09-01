@@ -64,7 +64,7 @@
 
 | 상태 | ID | 작업 | 의존 |
 |---|---|---|---|
-| ☐ | [M2-1](task/m2-1-handler-domain.md) | 핸들러 도메인 + 데모 계정 — HANDLER 역할·HandlerTask | M1 |
+| ☑ | [M2-1](task/m2-1-handler-domain.md) | 핸들러 도메인 + 데모 계정 — HANDLER 역할·HandlerTask | M1 |
 | ☐ | [M2-2](task/m2-2-task-autocreate.md) | 작업 자동 생성 — 부름 결제→배달, 반납→회수 | M2-1 |
 | ☐ | [M2-3](task/m2-3-handler-api.md) | 핸들러 API — 작업 큐·상태 전이·완료 시 차량 위치 반영 | M2-2 |
 | ☐ | [M2-4](task/m2-4-assign-api.md) | 배정 API — /ops/tasks·거리 추천·REPOSITION 생성 | M2-1 |

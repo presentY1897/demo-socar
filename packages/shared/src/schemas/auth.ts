@@ -6,6 +6,7 @@ export const UserRole = {
   CORP_MEMBER: 'CORP_MEMBER',
   CORP_ADMIN: 'CORP_ADMIN',
   OPS_ADMIN: 'OPS_ADMIN',
+  HANDLER: 'HANDLER',
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
