@@ -13,6 +13,21 @@ export interface ZoneMarker {
   vehicleCount: number;
 }
 
+/**
+ * 존 위에 겹쳐 그리는 차량 마커 (M3-4 운영 홈의 실시간 지도).
+ *
+ * 존과 같은 지도를 쓰는 이유는 운영자가 보는 질문이 "어느 존 근처에 무엇이 떠 있나"라서다 —
+ * 지도를 하나 더 만들면 타일·줌·좌표 규약이 두 벌로 갈린다. 색은 호출자가 정한다
+ * (상태 → 색 매핑의 단일 소스는 components/ops/state-style.ts).
+ */
+export interface VehicleMarker {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  color: string;
+}
+
 /** 이 줌 이상에서는 개별 존, 미만에서는 그리드 셀 단위로 취합 */
 const CLUSTER_BELOW_ZOOM = 13;
 
@@ -73,6 +88,18 @@ function clusterIcon(vehicleTotal: number, zoneCount: number) {
   });
 }
 
+function vehicleIcon(color: string, active: boolean) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${active ? 18 : 14}px;height:${active ? 18 : 14}px;border-radius:50%;
+      background:${color};border:2.5px solid #fff;
+      box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>`,
+    iconSize: [active ? 18 : 14, active ? 18 : 14],
+    iconAnchor: [active ? 9 : 7, active ? 9 : 7],
+  });
+}
+
 function FlyTo({ center }: { center: [number, number] | null }) {
   const map = useMap();
   useEffect(() => {
@@ -109,13 +136,21 @@ export default function ZoneMap({
   zones,
   selectedId,
   onSelect,
+  vehicles = [],
+  selectedVehicleId = null,
+  onSelectVehicle,
 }: {
   zones: ZoneMarker[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** 실시간 차량 오버레이 — 없으면 기존 존 지도 그대로다 */
+  vehicles?: VehicleMarker[];
+  selectedVehicleId?: string | null;
+  onSelectVehicle?: (id: string) => void;
 }) {
   const [zoom, setZoom] = useState(14);
   const selected = zones.find((z) => z.id === selectedId);
+  const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
 
   const clusters = useMemo(
     () => (zoom < CLUSTER_BELOW_ZOOM ? clusterZones(zones, zoom) : null),
@@ -134,7 +169,15 @@ export default function ZoneMap({
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ZoomTracker onZoom={setZoom} />
-      <FlyTo center={selected ? [selected.lat, selected.lng] : null} />
+      <FlyTo
+        center={
+          selectedVehicle
+            ? [selectedVehicle.lat, selectedVehicle.lng]
+            : selected
+              ? [selected.lat, selected.lng]
+              : null
+        }
+      />
 
       {clusters
         ? clusters.map((c) =>
@@ -157,6 +200,17 @@ export default function ZoneMap({
               eventHandlers={{ click: () => onSelect(z.id) }}
             />
           ))}
+
+      {/* 차량은 존 위에 얹는다 — 존은 배경, 지금 움직이는 것이 전경이다 */}
+      {vehicles.map((v) => (
+        <Marker
+          key={v.id}
+          position={[v.lat, v.lng]}
+          title={v.label}
+          icon={vehicleIcon(v.color, v.id === selectedVehicleId)}
+          eventHandlers={onSelectVehicle ? { click: () => onSelectVehicle(v.id) } : undefined}
+        />
+      ))}
     </MapContainer>
   );
 }

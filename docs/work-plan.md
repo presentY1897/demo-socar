@@ -78,7 +78,7 @@
 | ☑ | [M3-1](task/m3-1-domain-migration.md) | 도메인 마이그레이션 — Telemetry·ZoneContract·VehicleFinance | M2 |
 | ☑ | [M3-2](task/m3-2-telemetry-engine.md) | 텔레메트리 모의 엔진 — 조회 시점 계산 + SSE | M3-1 |
 | ☑ | [M3-3](task/m3-3-ops-api.md) | /ops API — fleet·계약·리스크·문의 답변·회계·경고 | M3-2 |
-| ☐ | [M3-4](task/m3-4-home-fleet-tabs.md) | 운영 홈 + Fleet 탭 UI — 경고 피드·실시간 지도·차량 등록 | M3-3 |
+| ☑ | [M3-4](task/m3-4-home-fleet-tabs.md) | 운영 홈 + Fleet 탭 UI — 경고 피드·실시간 지도·차량 등록 | M3-3 |
 | ☐ | [M3-5](task/m3-5-contract-customer-tabs.md) | 존/계약 + 고객 탭 UI — 잔여 자리·유의 유저·문의함 | M3-3 |
 | ☐ | [M3-6](task/m3-6-dispatch-accounting-tabs.md) | 작업/배차 + 회계 탭 UI — 배정 화면·손익 격리 | M3-3 |
 | ☐ | [M3-7](task/m3-7-verify-deploy.md) | 검증·문서·배포 — ADR-009, 6탭 완주 | M3-4~6 |

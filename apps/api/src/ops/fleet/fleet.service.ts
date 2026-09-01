@@ -11,6 +11,7 @@ import {
   type OpsFleetVehicleRes,
   type OpsMaintenanceNoteRes,
   type OpsVehicleFinanceRes,
+  type PricingPlanRes,
 } from '@socar/shared';
 import type { JwtUser } from '../../auth/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -94,6 +95,17 @@ export class OpsFleetService {
       })),
       maintenanceNotes: notes.map(toNoteRes),
     };
+  }
+
+  /**
+   * 등록 폼의 요금제 선택지.
+   *
+   * 요금제 id는 시드가 만든 cuid라 화면이 손으로 적을 수 없다 — 차량 등록 폼(M3-4)에
+   * 셀렉트를 채우려면 목록이 필요해서 읽기 전용으로 하나 연다. 소비자 화면은 차량에
+   * 실려 오는 plan을 그대로 쓰므로 이 목록을 쓰는 곳은 등록 폼뿐이다.
+   */
+  plans(): Promise<PricingPlanRes[]> {
+    return this.prisma.pricingPlan.findMany({ orderBy: { baseHourlyKrw: 'asc' } });
   }
 
   /**

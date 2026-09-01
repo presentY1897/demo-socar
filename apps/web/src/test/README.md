@@ -23,6 +23,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `msw/server.ts` | `setupServer` 인스턴스 |
 | `utils.tsx` | `renderWithProviders` — 세션·앱 라우터(경로·쿼리·동적 파라미터)·SWR 캐시 주입, `MOCK_USERS` |
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
+| `sse.ts` | SSE 대역 — `stubEventSource()` · `lastEventSource().emit(payload)` |
 
 ## 쓰는 법
 
@@ -127,8 +128,21 @@ M3-3이 백엔드를 끝내면서 픽스처와 기본 핸들러를 미리 넣어
 | `opsUsersRisk` · `opsUserDetail` | 유의 유저 1명 + 최근 예약/사고 |
 | `opsInquiries` | 답변 대기 1건 + 답변 완료 1건 |
 | `opsAccountingSummary` | 매출·비용·손익 |
+| `opsPlans` | 차량 등록 폼의 요금제 셀렉트 (`GET /ops/plans`) |
+| `liveVehicleInUse` · `liveTick({lat,lng})` | SSE 한 틱 — 운행 중 1대. 좌표를 바꿔 넣어 지도 갱신을 검증한다 |
 
 `GET /ops/fleet?state=`와 `GET /ops/inquiries?status=`는 기본 핸들러가 실제로 필터링한다.
+
+### 실시간(SSE) 화면
+
+jsdom에는 `EventSource`가 없다. [`src/test/sse.ts`](./sse.ts)의 `stubEventSource()`로 전송 계층만
+대역을 세우면 페이로드 파싱·상태 갱신은 실제 훅(`useLiveFleet`)이 그대로 돈다.
+
+```tsx
+stubEventSource();
+renderWithProviders(<DashboardPage />, { user: MOCK_USERS.opsAdmin });
+lastEventSource().emit(liveTick({ lat: 37.51, lng: 127.04 })); // 한 틱 보내기
+```
 
 ## 동적 라우트 화면 — `useParams()`로 통일 (규약)
 

@@ -88,6 +88,7 @@ describe('/ops API (통합)', () => {
       ['get', '/ops/overview'],
       ['get', '/ops/alerts'],
       ['get', '/ops/fleet'],
+      ['get', '/ops/plans'],
       ['get', '/ops/fleet/does-not-matter'],
       ['post', '/ops/fleet/does-not-matter/notes'],
       ['post', '/ops/vehicles'],
@@ -205,6 +206,17 @@ describe('/ops API (통합)', () => {
 
     await asOps(request(server()).post(`/ops/fleet/${vehicle.id}/notes`).send({ body: 'x' })).expect(400);
     await prisma.vehicleMaintenanceNote.delete({ where: { id: note.id } });
+  });
+
+  it('요금제 목록: 등록 폼의 셀렉트를 채울 id·이름이 실린다', async () => {
+    const res = await asOps(request(server()).get('/ops/plans')).expect(200);
+    const body = res.body as { id: string; name: string; baseHourlyKrw: number }[];
+
+    expect(body.length).toBeGreaterThan(0);
+    expect(body.map((p) => p.id)).toContain(planId);
+    expect(body.every((p) => typeof p.name === 'string' && p.name.length > 0)).toBe(true);
+    // 저렴한 요금제부터 — 셀렉트에서 사람이 훑는 순서
+    expect([...body].sort((a, b) => a.baseHourlyKrw - b.baseHourlyKrw)).toEqual(body);
   });
 
   it('차량 등록: 차량 + 도입/보험 + 텔레메트리가 함께 태어난다', async () => {

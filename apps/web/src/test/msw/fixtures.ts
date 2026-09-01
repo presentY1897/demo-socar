@@ -11,6 +11,8 @@ import {
   opsAccountingSummarySchema,
   opsAlertSchema,
   opsFleetDetailSchema,
+  liveVehicleSchema,
+  liveVehiclesEventSchema,
   opsFleetVehicleSchema,
   opsInquirySchema,
   opsLeaseSchema,
@@ -38,11 +40,13 @@ import {
   type HandlerTaskRes,
   type IncidentResultRes,
   type InquiryRes,
+  type LiveVehiclesEvent,
   type OpsAlertRes,
   type OpsFleetVehicleRes,
   type OpsInquiryRes,
   type OpsUserRiskRes,
   type OpsZoneRes,
+  type PricingPlanRes,
   type RentalUsageRes,
   type ReservationRes,
   type VehicleManualRes,
@@ -931,6 +935,35 @@ export const opsFleetById: Record<string, typeof opsFleetDetail> = {
   [opsFleetDetail.id]: opsFleetDetail,
 };
 
+/**
+ * SSE `/metrics/vehicles/live` 의 한 틱 (M3-2, 5초 주기).
+ * 운행 중 차량은 틱마다 좌표가 움직인다 — 지도 갱신 테스트가 좌표를 바꿔 넣는다.
+ */
+export const liveVehicleInUse = make(liveVehicleSchema, {
+  id: vehicleIoniq.id,
+  modelName: vehicleIoniq.modelName,
+  plateNo: vehicleIoniq.plateNo,
+  fuel: 'EV',
+  zone: {
+    name: zoneGangnam.name,
+    region: zoneGangnam.region,
+    lat: zoneGangnam.lat,
+    lng: zoneGangnam.lng,
+  },
+  state: 'IN_USE',
+  activeSince: hoursFromNow(-1.6),
+  dueBack: hoursFromNow(0.5),
+  telemetry: telemetryOf({ fuelPct: 12.4, lat: 37.503, lng: 127.031 }),
+});
+
+export const liveTick = (over: { lat?: number; lng?: number } = {}): LiveVehiclesEvent =>
+  make(liveVehiclesEventSchema, {
+    ts: new Date().toISOString(),
+    vehicles: [
+      { ...liveVehicleInUse, telemetry: { ...liveVehicleInUse.telemetry, ...over } },
+    ],
+  });
+
 export const opsOverview = make(opsOverviewSchema, {
   vehicleCount: 3,
   inUseCount: 1,
@@ -1077,6 +1110,9 @@ export const opsInquiryDone = make(opsInquirySchema, {
 });
 
 export const opsInquiries: OpsInquiryRes[] = [opsInquiryPending, opsInquiryDone];
+
+/** `GET /ops/plans` — 차량 등록 폼의 요금제 셀렉트 (시간당 요금 오름차순) */
+export const opsPlans: PricingPlanRes[] = [planStandard, planEv];
 
 export const opsAccountingSummary = make(opsAccountingSummarySchema, {
   days: 30,

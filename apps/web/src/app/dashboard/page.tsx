@@ -1,190 +1,90 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import useSWR from 'swr';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import {
-  OPS_VEHICLE_STATE_META,
-  type LiveVehicleRes,
-  type LiveVehiclesEvent,
-  type OpsVehicleState,
-} from '@socar/shared';
-import { API_URL, getToken, swrFetcher } from '@/lib/api';
-import { fmtTime, krw } from '@/lib/format';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { OPS_TAB_LABEL, opsTabSchema, type OpsTab } from '@socar/shared';
+import { OpsFleetTab } from '@/components/ops/OpsFleetTab';
+import { OpsHomeTab } from '@/components/ops/OpsHomeTab';
 import { useSession } from '@/lib/session';
 
-interface Summary {
-  days: number;
-  vehicleCount: number;
-  reservationCount: number;
-  revenueKrw: number;
-  utilizationPct: number;
-  lateReturnPct: number;
-  activeRentals: number;
-}
-interface DailyRow {
-  day: string;
-  reservations: number;
-  revenueKrw: number;
-}
-// 상태 4종(대기/운행/탁송/정비)과 라벨은 shared가 단일 소스 — 운영 화면(M3-4~6)도 같은 값을 본다
-const STATE_STYLE: Record<OpsVehicleState, string> = {
-  IDLE: 'bg-gray-100 text-gray-500',
-  IN_USE: 'bg-green-100 text-green-700',
-  IN_TRANSIT: 'bg-amber-100 text-amber-700',
-  MAINTENANCE: 'bg-red-50 text-red-500',
-};
-
+/**
+ * 운영 센터 — 매출 대시보드였던 `/dashboard`를 운영자가 쓰는 6탭 도구로 바꾼 화면 (M3-4~6).
+ *
+ * 탭 목록·라벨은 shared(`opsTabSchema` · `OPS_TAB_LABEL`)가 단일 소스다. 경고 피드가
+ * "이 항목은 어느 탭 소관"인지를 서버 응답(`alert.tab`)으로 실어 오기 때문에, 화면이 탭을
+ * 따로 적으면 서버가 보내는 탭 키와 조용히 어긋난다.
+ *
+ * 탭 상태는 URL 쿼리(`?tab=fleet`)로 시작해 이후로는 화면 상태로 든다 — 딥링크는 열리되
+ * 탭을 옮길 때마다 라우터를 돌려 화면 전체를 다시 마운트하지는 않는다.
+ */
 export default function DashboardPage() {
+  // useSearchParams()는 정적 프리렌더에서 서스펜스 경계를 요구한다 (딥링크 `?tab=`을 읽는 대가)
+  return (
+    <Suspense fallback={<p className="py-16 text-center text-sm text-gray-400">불러오는 중...</p>}>
+      <OpsCenter />
+    </Suspense>
+  );
+}
+
+function OpsCenter() {
   const { user, ready } = useSession();
   const isOps = user?.role === 'OPS_ADMIN';
-  const { data: summary } = useSWR<Summary>(isOps ? '/metrics/summary?days=30' : null, swrFetcher);
-  const { data: daily } = useSWR<DailyRow[]>(isOps ? '/metrics/daily?days=14' : null, swrFetcher);
 
-  const [live, setLive] = useState<LiveVehicleRes[] | null>(null);
-  const [liveTs, setLiveTs] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOps) return;
-    const token = getToken();
-    const es = new EventSource(`${API_URL}/metrics/vehicles/live?token=${token}`);
-    es.onmessage = (e) => {
-      const payload = JSON.parse(e.data) as LiveVehiclesEvent;
-      setLive(payload.vehicles);
-      setLiveTs(payload.ts);
-    };
-    return () => es.close();
-  }, [isOps]);
+  const searchParams = useSearchParams();
+  const fromUrl = opsTabSchema.safeParse(searchParams.get('tab'));
+  const [tab, setTab] = useState<OpsTab>(fromUrl.success ? fromUrl.data : 'home');
+  /** 경고에서 넘어왔을 때 그 탭이 열어야 할 행 (서버가 준 alert.targetId) */
+  const [targetId, setTargetId] = useState<string | null>(null);
 
   if (ready && !isOps) {
-    return <p className="py-16 text-center text-sm text-gray-400">운영 어드민 계정으로 로그인하세요</p>;
+    return (
+      <p className="py-16 text-center text-sm text-gray-400">운영 어드민 계정으로 로그인하세요</p>
+    );
   }
 
-  const chartData = (daily ?? []).map((d) => ({
-    ...d,
-    label: d.day.slice(5).replace('-', '/'),
-    revenueMan: Math.round(d.revenueKrw / 10000),
-  }));
+  const goto = (next: OpsTab, target?: string) => {
+    setTab(next);
+    setTargetId(target ?? null);
+  };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-4">
-      <h1 className="text-xl font-bold">운영 대시보드</h1>
-      <p className="text-sm text-gray-500">최근 30일 기준</p>
+    <div className="mx-auto max-w-5xl px-4 py-4">
+      <h1 className="text-xl font-bold">운영 센터</h1>
+      <p className="text-sm text-gray-500">차량·작업·계약·고객을 한 화면에서 봅니다</p>
 
-      {/* 지표 카드 */}
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="매출" value={summary ? krw(summary.revenueKrw) : '—'} />
-        <StatCard label="예약 건수" value={summary ? `${summary.reservationCount}건` : '—'} />
-        <StatCard
-          label="차량 가동률"
-          value={summary ? `${summary.utilizationPct}%` : '—'}
-          sub={summary ? `차량 ${summary.vehicleCount}대` : undefined}
-        />
-        <StatCard
-          label="지연 반납률"
-          value={summary ? `${summary.lateReturnPct}%` : '—'}
-          sub={summary ? `현재 이용 중 ${summary.activeRentals}건` : undefined}
-          warn={(summary?.lateReturnPct ?? 0) >= 15}
-        />
+      <div role="tablist" aria-label="운영 센터 탭" className="mt-3 flex gap-1 overflow-x-auto pb-1">
+        {opsTabSchema.options.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => goto(t)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${
+              tab === t ? 'bg-sky-500 font-semibold text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {OPS_TAB_LABEL[t]}
+          </button>
+        ))}
       </div>
 
-      {/* 차트 */}
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold">일별 예약 건수 (14일)</h2>
-          <div className="mt-2 h-48">
-            <ResponsiveContainer>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" fontSize={10} tickLine={false} />
-                <YAxis fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="reservations" name="예약" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold">일별 매출 (만원, 14일)</h2>
-          <div className="mt-2 h-48">
-            <ResponsiveContainer>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" fontSize={10} tickLine={false} />
-                <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey="revenueMan" name="매출(만원)" stroke="#6366f1" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* 실시간 차량 현황 */}
-      <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">실시간 차량 현황 (SSE)</h2>
-          {liveTs && (
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-              {fmtTime(liveTs)} 갱신
-            </span>
-          )}
-        </div>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr className="border-b text-xs text-gray-400">
-                <th className="py-1.5 font-normal">차량</th>
-                <th className="font-normal">존</th>
-                <th className="font-normal">상태</th>
-                <th className="font-normal">반납 예정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(live ?? []).map((v) => (
-                <tr key={v.id} className="border-b border-gray-50">
-                  <td className="py-1.5">
-                    {v.modelName} <span className="text-xs text-gray-400">{v.plateNo}</span>
-                  </td>
-                  <td className="text-xs text-gray-500">{v.zone.name}</td>
-                  <td>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] ${STATE_STYLE[v.state]}`}>
-                      {OPS_VEHICLE_STATE_META[v.state].label}
-                    </span>
-                  </td>
-                  <td className="text-xs text-gray-500">{v.dueBack ? fmtTime(v.dueBack) : '—'}</td>
-                </tr>
-              ))}
-              {!live && (
-                <tr>
-                  <td colSpan={4} className="py-6 text-center text-xs text-gray-400">연결 중...</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="mt-4">
+        {tab === 'home' && <OpsHomeTab onNavigate={goto} />}
+        {tab === 'fleet' && <OpsFleetTab targetId={targetId} />}
+        {tab === 'dispatch' && <Placeholder tab="dispatch" />}
+        {tab === 'zones' && <Placeholder tab="zones" />}
+        {tab === 'customers' && <Placeholder tab="customers" />}
+        {tab === 'accounting' && <Placeholder tab="accounting" />}
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
+/** M3-5·M3-6이 채운다 — 탭 셸은 M3-4에서 먼저 선다 */
+function Placeholder({ tab }: { tab: OpsTab }) {
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className={`mt-1 text-lg font-bold ${warn ? 'text-red-500' : ''}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-gray-400">{sub}</p>}
-    </div>
+    <p className="py-16 text-center text-sm text-gray-400">
+      {OPS_TAB_LABEL[tab]} 탭은 준비 중이에요
+    </p>
   );
 }

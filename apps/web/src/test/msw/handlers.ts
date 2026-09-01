@@ -20,6 +20,7 @@ import {
   opsUserDetailSchema,
   opsUserRiskSchema,
   opsZoneSchema,
+  pricingPlanSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
   loginResponseSchema,
@@ -61,6 +62,7 @@ import {
   opsInquiries,
   opsLeases,
   opsOverview,
+  opsPlans,
   opsUserDetail,
   opsUsersRisk,
   opsZonePaid,
@@ -399,6 +401,10 @@ export const handlers = [
       201,
     );
   }),
+
+  http.get(url('/ops/plans'), () =>
+    HttpResponse.json(opsPlans.map((p) => pricingPlanSchema.parse(p))),
+  ),
 
   http.post(url('/ops/vehicles'), async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>;

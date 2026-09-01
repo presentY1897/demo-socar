@@ -5,12 +5,7 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import type { VehicleManualRes } from '@socar/shared';
 import { ApiError, swrFetcher } from '@/lib/api';
-
-const FUEL_LABEL: Record<string, string> = {
-  EV: '전기차',
-  GASOLINE: '가솔린',
-  HYBRID: '하이브리드',
-};
+import { FUEL_LABEL } from '@/lib/format';
 
 /** 차종별 매뉴얼 (M1-6) — 섹션 아코디언. 콘텐츠는 API의 정적 데이터가 진실이다 */
 export function VehicleManualView({ id }: { id: string }) {

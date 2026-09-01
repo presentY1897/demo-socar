@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { OpsFleetController, OpsVehiclesController } from './fleet.controller';
+import { OpsFleetController, OpsPlansController, OpsVehiclesController } from './fleet.controller';
 import { OpsFleetService } from './fleet.service';
 
 @Module({
-  controllers: [OpsFleetController, OpsVehiclesController],
+  controllers: [OpsFleetController, OpsPlansController, OpsVehiclesController],
   providers: [OpsFleetService],
 })
 export class OpsFleetModule {}

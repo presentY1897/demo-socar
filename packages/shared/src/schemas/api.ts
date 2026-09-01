@@ -60,6 +60,7 @@ export const pricingPlanSchema = z.object({
   insuranceStandardKrw: z.number().int(),
   insuranceFullKrw: z.number().int(),
 });
+export type PricingPlanRes = z.infer<typeof pricingPlanSchema>;
 
 /** 존 상세/차량 상세가 공유하는 차량 형태 */
 export const vehicleSummarySchema = z.object({

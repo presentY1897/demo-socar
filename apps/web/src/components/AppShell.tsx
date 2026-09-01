@@ -24,10 +24,11 @@ const NAV = [
     icon: '💬',
     show: (user: AuthUser | null) => !!user && user.role !== 'HANDLER',
   },
+  // /dashboard는 매출 지표 화면에서 6탭 운영 센터가 됐다 (M3-4)
   {
     href: '/dashboard',
-    label: '지표',
-    icon: '📊',
+    label: '운영',
+    icon: '🛠️',
     show: (user: AuthUser | null) => user?.role === 'OPS_ADMIN',
   },
   // 운영 어드민의 리스 요청 처리 — M3 백오피스가 붙으면 그 탭의 소섹션으로 들어간다

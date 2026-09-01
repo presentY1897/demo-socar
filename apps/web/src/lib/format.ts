@@ -21,6 +21,13 @@ export const RESERVATION_STATUS_LABEL: Record<string, string> = {
   CANCELED: '취소됨',
 };
 
+/** 연료 종류 표기 — 차량 매뉴얼·운영 차량 표·등록 폼이 같은 문구를 본다 */
+export const FUEL_LABEL: Record<string, string> = {
+  EV: '전기차',
+  GASOLINE: '가솔린',
+  HYBRID: '하이브리드',
+};
+
 export const DISPATCH_STATUS_LABEL: Record<string, string> = {
   REQUESTED: '접수됨',
   RECOMMENDED: '결정 대기',

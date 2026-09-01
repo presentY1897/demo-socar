@@ -40,6 +40,21 @@ export class OpsFleetController {
 }
 
 /**
+ * 요금제 목록 — 차량 등록 폼(M3-4)의 셀렉트 하나를 위한 읽기 전용 조회.
+ * 등록 요청이 요금제 id를 요구하는데 그 id를 알 방법이 없으면 폼을 채울 수 없다.
+ */
+@Roles('OPS_ADMIN')
+@Controller('ops/plans')
+export class OpsPlansController {
+  constructor(private readonly fleet: OpsFleetService) {}
+
+  @Get()
+  list() {
+    return this.fleet.plans();
+  }
+}
+
+/**
  * 차량 등록 — 목록(`/ops/fleet`)이 아니라 자원(`/ops/vehicles`)에 만든다.
  * 작업 문서의 경로를 그대로 따르고, 같은 서비스가 처리한다.
  */
