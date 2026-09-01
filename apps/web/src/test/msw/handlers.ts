@@ -1,6 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import {
   availabilitySchema,
+  handlerQueueSchema,
+  handlerTaskSchema,
   conditionReportSchema,
   bizLeaseSchema,
   corpMemberSchema,
@@ -24,11 +26,14 @@ import {
   vehicleManualSchema,
   zoneDetailSchema,
   zoneMarkerSchema,
+  type HandlerTaskRes,
   type QuoteRequestDto,
   type VehicleControlActionValue,
 } from '@socar/shared';
 import {
   allZones,
+  handlerQueue,
+  handlerTasksById,
   conditionCheckIn,
   conditionCheckOut,
   corpMembers,
@@ -89,6 +94,13 @@ const DEMO_ACCOUNTS = [
   userCorpAdmin,
   userOpsAdmin,
 ];
+
+/** 작업 상태 전이 목 — 실제 API처럼 갱신된 작업 1건을 돌려준다 */
+const transitionTask = (id: string, patch: Partial<HandlerTaskRes>) => {
+  const task = handlerTasksById[id];
+  if (!task) return HttpResponse.json({ message: '작업을 찾을 수 없습니다' }, { status: 404 });
+  return json(handlerTaskSchema, { ...task, ...patch }, 201);
+};
 
 /**
  * 기본 핸들러 — 대부분의 화면이 이 상태에서 렌더된다.
@@ -308,6 +320,24 @@ export const handlers = [
   http.post(url('/ops/leases/:id/reject'), () =>
     json(opsLeaseSchema, { ...opsLeases[0], status: 'ACTIVE', requestedEndAt: null }, 201),
   ),
+
+  // ── 핸들러 작업 (M2-5) ──────────────────────────
+  // 상태 전이는 요청받은 작업에 그대로 반영해 돌려준다. 전이 후 큐가 바뀌는 흐름을
+  // 검증하는 테스트는 server.use로 상태를 들고 있는 목을 세운다.
+  http.get(url('/handler/tasks'), () => json(handlerQueueSchema, handlerQueue)),
+
+  http.post(url('/handler/tasks/:id/accept'), ({ params }) =>
+    transitionTask(String(params.id), { status: 'ASSIGNED', assigneeId: 'user-handler', assigneeName: '한기사' }),
+  ),
+
+  http.post(url('/handler/tasks/:id/start'), ({ params }) =>
+    transitionTask(String(params.id), { status: 'EN_ROUTE' }),
+  ),
+
+  http.post(url('/handler/tasks/:id/complete'), async ({ params, request }) => {
+    const body = (await request.json()) as { note: string };
+    return transitionTask(String(params.id), { status: 'DONE', completionNote: body.note });
+  }),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

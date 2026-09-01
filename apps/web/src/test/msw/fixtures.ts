@@ -1,5 +1,7 @@
 import {
   authUserSchema,
+  handlerQueueSchema,
+  handlerTaskSchema,
   conditionReportSchema,
   corpMemberSchema,
   couponSchema,
@@ -23,6 +25,8 @@ import {
   INSURANCE_META,
   MOCK_INSURER,
   type ConditionReportRes,
+  type HandlerQueueRes,
+  type HandlerTaskRes,
   type IncidentResultRes,
   type InquiryRes,
   type RentalUsageRes,
@@ -705,3 +709,106 @@ export const opsLeases = [
     corporation: { id: 'corp-1', name: '주식회사 데모컴퍼니' },
   }),
 ];
+// ─────────────────────── 핸들러 작업 (M2-5) ───────────────────────
+
+/** 기한/완료 시각은 화면이 "오늘"을 판정하므로 렌더 시점 기준으로 만든다 */
+const hoursFromNow = (h: number) => new Date(Date.now() + h * 3600 * 1000).toISOString();
+
+/** 미배정 공개 작업 — 수락 버튼이 붙는다 */
+export const taskDeliveryOpen = make(handlerTaskSchema, {
+  id: 'task-delivery-open',
+  type: 'DELIVERY',
+  status: 'PENDING',
+  reservationId: 'resv-delivery',
+  vehicle: { id: vehicleIoniq.id, modelName: '아이오닉 5', plateNo: '11가1111', fuel: 'EV' },
+  from: { zoneId: zoneGangnam.id, label: zoneGangnam.name, lat: zoneGangnam.lat, lng: zoneGangnam.lng },
+  to: { zoneId: null, label: '회사 정문 앞', lat: 37.4995, lng: 127.0301 },
+  assigneeId: null,
+  assigneeName: null,
+  dueAt: hoursFromNow(3),
+  overdue: false,
+  etaMinutes: 12,
+  distanceMeters: 2400,
+  assignedAt: null,
+  startedAt: null,
+  completedAt: null,
+  canceledAt: null,
+  cancelReason: null,
+  completionNote: null,
+  createdAt: hoursFromNow(-2),
+});
+
+/** 내게 배정된 오늘 작업 — 기한이 지나 지연 표시가 붙는다 */
+export const taskRetrieveMine = make(handlerTaskSchema, {
+  ...taskDeliveryOpen,
+  id: 'task-retrieve-mine',
+  type: 'RETRIEVE',
+  status: 'ASSIGNED',
+  from: { zoneId: null, label: '회사 정문 앞', lat: 37.4995, lng: 127.0301 },
+  to: { zoneId: zoneGangnam.id, label: zoneGangnam.name, lat: zoneGangnam.lat, lng: zoneGangnam.lng },
+  assigneeId: 'user-handler',
+  assigneeName: '한기사',
+  dueAt: hoursFromNow(-1),
+  overdue: true,
+  assignedAt: hoursFromNow(-2),
+  etaMinutes: 9,
+});
+
+/** 내 예정 작업 (내일) */
+export const taskRepositionUpcoming = make(handlerTaskSchema, {
+  ...taskDeliveryOpen,
+  id: 'task-reposition-upcoming',
+  type: 'REPOSITION',
+  status: 'ASSIGNED',
+  reservationId: null,
+  to: { zoneId: zoneYeoksam.id, label: zoneYeoksam.name, lat: zoneYeoksam.lat, lng: zoneYeoksam.lng },
+  assigneeId: 'user-handler',
+  assigneeName: '한기사',
+  dueAt: hoursFromNow(26),
+  assignedAt: hoursFromNow(-1),
+  etaMinutes: 7,
+});
+
+/** 오늘 끝낸 작업 (이력 탭) */
+export const taskDoneToday = make(handlerTaskSchema, {
+  ...taskRepositionUpcoming,
+  id: 'task-done-today',
+  status: 'DONE',
+  dueAt: hoursFromNow(-4),
+  assignedAt: hoursFromNow(-5),
+  startedAt: hoursFromNow(-5),
+  completedAt: hoursFromNow(-3),
+  completionNote: '지하 2층 B-14 주차 완료',
+  etaMinutes: null,
+  distanceMeters: null,
+});
+
+/** 사흘 전 끝낸 작업 (이번 주 탭) */
+export const taskDoneThisWeek = make(handlerTaskSchema, {
+  ...taskDoneToday,
+  id: 'task-done-week',
+  completedAt: hoursFromNow(-72),
+});
+
+export const handlerQueue = make(handlerQueueSchema, {
+  today: [taskRetrieveMine],
+  upcoming: [taskRepositionUpcoming],
+  open: [taskDeliveryOpen],
+  done: [taskDoneToday, taskDoneThisWeek],
+});
+
+export const handlerTasksById: Record<string, HandlerTaskRes> = Object.fromEntries(
+  [taskDeliveryOpen, taskRetrieveMine, taskRepositionUpcoming, taskDoneToday, taskDoneThisWeek].map(
+    (t) => [t.id, t],
+  ),
+);
+
+export const emptyHandlerQueue: HandlerQueueRes = { today: [], upcoming: [], open: [], done: [] };
+
+export const userHandler = make(authUserSchema, {
+  id: 'user-handler',
+  email: 'handler@demo.mocar.kr',
+  name: '한기사',
+  role: 'HANDLER',
+  corporationId: null,
+});

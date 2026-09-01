@@ -14,11 +14,17 @@ const DEMO_ACCOUNTS = [
   { email: 'approver@demo.mocar.kr', label: '법인 · 승인' },
   { email: 'admin@demo.mocar.kr', label: '법인 · 관리자' },
   { email: 'ops@demo.mocar.kr', label: '운영 어드민' },
+  { email: 'handler@demo.mocar.kr', label: '핸들러(운송기사)' },
 ];
 
-/** 법인 계정은 분리된 B2B 서비스(/biz)가 홈이다 */
-const landingFor = (role: string) =>
-  role === 'CORP_MEMBER' || role === 'CORP_ADMIN' ? '/biz' : '/';
+/**
+ * 역할별 첫 화면 — 법인 계정은 분리된 B2B 서비스(/biz)가, 핸들러는 자기 작업 큐가 홈이다.
+ */
+const landingFor = (role: string) => {
+  if (role === 'HANDLER') return '/handler';
+  if (role === 'CORP_MEMBER' || role === 'CORP_ADMIN') return '/biz';
+  return '/';
+};
 
 export default function LoginPage() {
   const router = useRouter();

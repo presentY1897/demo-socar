@@ -8,10 +8,22 @@ import { BizShell } from './BizShell';
 
 const NAV = [
   { href: '/', label: '홈', icon: '🗺️', show: () => true },
-  { href: '/reservations', label: '예약', icon: '🚗', show: (user: AuthUser | null) => !!user },
+  // 핸들러는 이용자가 아니라 현장 작업자다 — 예약/문의 대신 작업 큐만 본다
+  { href: '/handler', label: '작업', icon: '🛻', show: (user: AuthUser | null) => user?.role === 'HANDLER' },
+  {
+    href: '/reservations',
+    label: '예약',
+    icon: '🚗',
+    show: (user: AuthUser | null) => !!user && user.role !== 'HANDLER',
+  },
   // 비즈니스 진입은 등급 보유 여부로 — 역할이 아니라 등급이 법인 서비스의 자격이다
   { href: '/biz', label: '비즈니스', icon: '🏢', show: (user: AuthUser | null) => !!user?.corpGrade },
-  { href: '/inquiries', label: '문의', icon: '💬', show: (user: AuthUser | null) => !!user },
+  {
+    href: '/inquiries',
+    label: '문의',
+    icon: '💬',
+    show: (user: AuthUser | null) => !!user && user.role !== 'HANDLER',
+  },
   {
     href: '/dashboard',
     label: '지표',

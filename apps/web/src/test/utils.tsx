@@ -16,6 +16,7 @@ import {
   userCorpApprover,
   userCorpMember,
   userCorpViewer,
+  userHandler,
   userOpsAdmin,
   userPersonal,
 } from './msw/fixtures';
@@ -28,6 +29,7 @@ export const MOCK_USERS = {
   corpApprover: userCorpApprover,
   corpAdmin: userCorpAdmin,
   opsAdmin: userOpsAdmin,
+  handler: userHandler,
 } satisfies Record<string, AuthUser>;
 
 /** 앱 라우터 목 — push/replace 호출 여부로 화면 이동을 검증한다 */
