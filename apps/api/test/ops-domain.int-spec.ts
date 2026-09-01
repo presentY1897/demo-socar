@@ -9,7 +9,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { runSeed, SEED_VERSION } from '../src/seed/run-seed';
+import { CORP_ZONE_NAME, loadZoneDefs, runSeed, SEED_VERSION } from '../src/seed/run-seed';
 
 process.env.DATABASE_URL ??= 'postgresql://socar:socar@localhost:5432/socar';
 
@@ -22,6 +22,12 @@ const inDays = (days: number) => new Date(Date.now() + days * 24 * 3600 * 1000);
 describe('운영 백오피스 도메인 (통합)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  /**
+   * 같은 DB에서 다른 스위트의 픽스처(존·차량)가 함께 산다.
+   * "전 차량·전 존에 붙었나"는 시드가 만든 것에 한해 따진다 — 픽스처까지 세면
+   * 이 스위트가 다른 스위트의 정리 상태에 끌려다니게 된다.
+   */
+  let seedZoneNames: Set<string>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -32,6 +38,8 @@ describe('운영 백오피스 도메인 (통합)', () => {
     // 데모 시드가 없거나 구버전이면 이 스위트가 필요한 상태를 직접 만든다
     const meta = await prisma.seedMeta.findUnique({ where: { id: 1 } });
     if ((meta?.version ?? 0) < SEED_VERSION) await runSeed(prisma);
+
+    seedZoneNames = new Set([...loadZoneDefs().map((z) => z.name), CORP_ZONE_NAME]);
   });
 
   afterAll(async () => {
@@ -39,7 +47,9 @@ describe('운영 백오피스 도메인 (통합)', () => {
   });
 
   it('시드 차량은 모두 텔레메트리와 도입/보험 정보를 갖는다', async () => {
-    const vehicles = await prisma.vehicle.findMany({ include: { telemetry: true, finance: true } });
+    const vehicles = (
+      await prisma.vehicle.findMany({ include: { telemetry: true, finance: true, zone: true } })
+    ).filter((v) => seedZoneNames.has(v.zone.name));
     expect(vehicles.length).toBeGreaterThan(0);
 
     const withoutTelemetry = vehicles.filter((v) => v.telemetry === null);
@@ -64,7 +74,9 @@ describe('운영 백오피스 도메인 (통합)', () => {
   });
 
   it('시드 존은 모두 계약 정보를 갖고, 유·무료가 섞여 있다', async () => {
-    const zones = await prisma.zone.findMany({ include: { contract: true } });
+    const zones = (await prisma.zone.findMany({ include: { contract: true } })).filter((z) =>
+      seedZoneNames.has(z.name),
+    );
     expect(zones.length).toBeGreaterThan(0);
     expect(zones.filter((z) => z.contract === null)).toHaveLength(0);
 

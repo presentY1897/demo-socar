@@ -25,6 +25,9 @@ import { initialTelemetry } from '../telemetry/telemetry-defaults';
  */
 export const SEED_VERSION = 7;
 
+/** 법인 전용존 이름 — 시드가 만든 존을 테스트가 되짚을 때 쓴다 */
+export const CORP_ZONE_NAME = '데모컴퍼니 사옥 주차장';
+
 interface ZoneDef {
   name: string;
   region: string;
@@ -38,7 +41,7 @@ interface ZoneDef {
  * 존 정의: build:zones가 만든 실데이터(data/zones.json)가 있으면 그것을,
  * 없으면 내장 기본값을 쓴다. (실데이터 = 전국주차장정보표준데이터 + OSM)
  */
-function loadZoneDefs(): ZoneDef[] {
+export function loadZoneDefs(): ZoneDef[] {
   const file = path.resolve(process.cwd(), 'data/zones.json');
   if (fs.existsSync(file)) {
     const zones = JSON.parse(fs.readFileSync(file, 'utf8')) as ZoneDef[];
@@ -242,7 +245,7 @@ export async function runSeed(prisma: PrismaClient) {
   // ── 법인 전용존 + 전용 차량 (= 법인이 MOCAR에서 리스한 차량 — 아래 리스 계약과 짝) ──
   const corpZone = await prisma.zone.create({
     data: {
-      name: '데모컴퍼니 사옥 주차장',
+      name: CORP_ZONE_NAME,
       region: 'seoul',
       address: corp.officeAddress,
       lat: corp.officeLat,

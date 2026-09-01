@@ -26,6 +26,7 @@ import {
 } from '@socar/shared';
 import { HandlerTasksService } from '../handler/handler-tasks.service';
 import { PaymentsService } from '../payments/payments.service';
+import { mockDrivenKm } from '../telemetry/telemetry-mock';
 import { TelemetryService } from '../telemetry/telemetry.service';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
 import { PrismaService } from '../prisma/prisma.service';
@@ -186,12 +187,14 @@ export class RentalsService {
       const lateMs = returnedAt.getTime() - rental.reservation.endAt.getTime();
       const lateMinutes = Math.max(0, Math.ceil(lateMs / 60000));
 
-      // 텔레메트리 모의: 이용 경과시간 × 15~35km/h
-      const elapsedHours = Math.max(
-        (returnedAt.getTime() - rental.startedAt.getTime()) / 3600000,
+      // 주행거리는 차가 알려주는 값이다 — 텔레메트리 모의 엔진(M3-2)과 같은 규칙으로 뽑아
+      // 계기판(odometer)과 정산 거리가 어긋나지 않게 한다. 하한 0.05h는 M1-3 때와 같다.
+      const distanceKm = mockDrivenKm(
+        rental.reservation.vehicleId,
+        rental.startedAt,
+        returnedAt,
         0.05,
       );
-      const distanceKm = Math.round(elapsedHours * (15 + Math.random() * 20) * 10) / 10;
 
       await tx.rental.update({
         where: { id: rentalId },
@@ -253,6 +256,13 @@ export class RentalsService {
       // 부름: 차는 아직 수령지에 있다 — 정산과 같은 트랜잭션에서 회수 작업을 만든다 (M2-2).
       // 차량 존은 회수 작업이 완료될 때 비로소 갱신된다 (M2-3)
       await this.handlerTasks.createRetrieveTask(tx, rental.reservation);
+
+      // 반납 시점 스냅샷 확정 — 여기서 멈춘 값에서 다음 계산이 다시 시작한다.
+      // 확정하지 않으면 반납한 차가 마지막 저장값 기준으로 계속 달린 것처럼 보인다.
+      await this.telemetry.freeze(tx, rental.reservation.vehicleId, {
+        position: await this.returnPosition(tx, rental.reservation),
+        drivenSince: rental.startedAt,
+      });
 
       return tx.rental.update({
         where: { id: rentalId },
@@ -470,6 +480,24 @@ export class RentalsService {
       createdAt: report.createdAt.toISOString(),
       photos: toStoredPhotos(report.photos),
     };
+  }
+
+  /**
+   * 반납한 차가 실제로 서 있는 자리.
+   * 편도는 반납 존, 부름은 수령지(회수 전까지 거기 있다), 왕복은 원래 존이다.
+   */
+  private async returnPosition(
+    tx: Db,
+    reservation: { returnZoneId: string | null; deliveryLat: number | null; deliveryLng: number | null; vehicle: { zoneId: string } },
+  ) {
+    if (reservation.deliveryLat !== null && reservation.deliveryLng !== null) {
+      return { lat: reservation.deliveryLat, lng: reservation.deliveryLng };
+    }
+    const zone = await tx.zone.findUniqueOrThrow({
+      where: { id: reservation.returnZoneId ?? reservation.vehicle.zoneId },
+      select: { lat: true, lng: true },
+    });
+    return zone;
   }
 
   private async ownedRental(tx: Db, user: JwtUser, rentalId: string) {

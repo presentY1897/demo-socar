@@ -162,12 +162,18 @@ export class HandlerService {
         include: { ...HANDLER_TASK_INCLUDE, photos: { orderBy: { createdAt: 'asc' } } },
       });
 
-      // 존은 차량이, 문 잠금·시동은 텔레메트리가 갖는다 (M3-1에서 이관)
+      // 존은 차량이, 센서 상태는 텔레메트리가 갖는다 (M3-1에서 이관)
       const zoneMove = this.vehicleZoneAfter(task);
       if (zoneMove) {
         await tx.vehicle.update({ where: { id: task.vehicleId }, data: { zoneId: zoneMove } });
       }
-      await this.telemetry.applySmartKey(tx, task.vehicleId, HANDOVER_STATE);
+      // 작업 완료 = 이동이 끝난 순간이라 그 시점 값으로 텔레메트리를 확정한다 (M3-2).
+      // 차는 도착지에 잠긴 채 시동이 꺼진 상태로 선다.
+      await this.telemetry.freeze(tx, task.vehicleId, {
+        position: toPlace(task),
+        state: HANDOVER_STATE,
+        drivenSince: task.startedAt ?? task.assignedAt,
+      });
 
       return this.one(updated, { photos: toStoredPhotos(updated.photos) });
     });

@@ -13,6 +13,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import {
+  OPS_VEHICLE_STATE_META,
+  type LiveVehicleRes,
+  type LiveVehiclesEvent,
+  type OpsVehicleState,
+} from '@socar/shared';
 import { API_URL, getToken, swrFetcher } from '@/lib/api';
 import { fmtTime, krw } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -31,21 +37,13 @@ interface DailyRow {
   reservations: number;
   revenueKrw: number;
 }
-interface LiveVehicle {
-  id: string;
-  modelName: string;
-  plateNo: string;
-  zone: { name: string; region: string };
-  state: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE';
-  dueBack: string | null;
-}
-
-const STATE_LABEL = { AVAILABLE: '대기', IN_USE: '이용 중', MAINTENANCE: '정비' } as const;
-const STATE_STYLE = {
-  AVAILABLE: 'bg-gray-100 text-gray-500',
+// 상태 4종(대기/운행/탁송/정비)과 라벨은 shared가 단일 소스 — 운영 화면(M3-4~6)도 같은 값을 본다
+const STATE_STYLE: Record<OpsVehicleState, string> = {
+  IDLE: 'bg-gray-100 text-gray-500',
   IN_USE: 'bg-green-100 text-green-700',
+  IN_TRANSIT: 'bg-amber-100 text-amber-700',
   MAINTENANCE: 'bg-red-50 text-red-500',
-} as const;
+};
 
 export default function DashboardPage() {
   const { user, ready } = useSession();
@@ -53,7 +51,7 @@ export default function DashboardPage() {
   const { data: summary } = useSWR<Summary>(isOps ? '/metrics/summary?days=30' : null, swrFetcher);
   const { data: daily } = useSWR<DailyRow[]>(isOps ? '/metrics/daily?days=14' : null, swrFetcher);
 
-  const [live, setLive] = useState<LiveVehicle[] | null>(null);
+  const [live, setLive] = useState<LiveVehicleRes[] | null>(null);
   const [liveTs, setLiveTs] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,7 +59,7 @@ export default function DashboardPage() {
     const token = getToken();
     const es = new EventSource(`${API_URL}/metrics/vehicles/live?token=${token}`);
     es.onmessage = (e) => {
-      const payload = JSON.parse(e.data) as { ts: string; vehicles: LiveVehicle[] };
+      const payload = JSON.parse(e.data) as LiveVehiclesEvent;
       setLive(payload.vehicles);
       setLiveTs(payload.ts);
     };
@@ -162,7 +160,7 @@ export default function DashboardPage() {
                   <td className="text-xs text-gray-500">{v.zone.name}</td>
                   <td>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] ${STATE_STYLE[v.state]}`}>
-                      {STATE_LABEL[v.state]}
+                      {OPS_VEHICLE_STATE_META[v.state].label}
                     </span>
                   </td>
                   <td className="text-xs text-gray-500">{v.dueBack ? fmtTime(v.dueBack) : '—'}</td>

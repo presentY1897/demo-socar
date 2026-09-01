@@ -14,3 +14,4 @@ export * from './schemas/incident';
 export * from './schemas/inquiry';
 export * from './schemas/photo';
 export * from './schemas/reservation';
+export * from './schemas/telemetry';

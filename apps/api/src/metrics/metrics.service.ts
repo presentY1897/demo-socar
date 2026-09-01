@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { LiveVehicleRes } from '@socar/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { toTelemetryRes, TelemetryService } from '../telemetry/telemetry.service';
 
 @Injectable()
 export class MetricsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly telemetry: TelemetryService,
+  ) {}
 
   /** 핵심 지표 요약 (최근 N일) */
   async summary(days: number) {
@@ -103,29 +108,42 @@ export class MetricsService {
     }));
   }
 
-  /** 실시간 차량 현황 (SSE 페이로드) */
-  async liveVehicles() {
-    const vehicles = await this.prisma.vehicle.findMany({
-      include: {
-        zone: { select: { name: true, region: true, lat: true, lng: true } },
-        reservations: {
-          where: { status: 'IN_USE' },
-          include: { user: { select: { name: true } }, rental: true },
-          take: 1,
+  /**
+   * 실시간 차량 현황 (SSE 페이로드) — 텔레메트리 포함 (M3-2).
+   *
+   * 상태(대기/운행/탁송/정비)와 센서 값은 전 차량을 한 번에 계산해 온다 —
+   * 5초마다 도는 채널이라 차량마다 질의를 날리면 그것만으로 무료 티어가 눕는다.
+   */
+  async liveVehicles(): Promise<LiveVehicleRes[]> {
+    const now = new Date();
+    const [vehicles, telemetry] = await Promise.all([
+      this.prisma.vehicle.findMany({
+        include: {
+          zone: { select: { name: true, region: true, lat: true, lng: true } },
+          reservations: {
+            where: { status: 'IN_USE' },
+            select: { endAt: true, rental: { select: { startedAt: true } } },
+            take: 1,
+          },
         },
-      },
-      orderBy: { plateNo: 'asc' },
-    });
+        orderBy: { plateNo: 'asc' },
+      }),
+      this.telemetry.currentMany(null, now),
+    ]);
+
     return vehicles.map((v) => {
       const active = v.reservations[0];
+      const current = telemetry.get(v.id)!;
       return {
         id: v.id,
         modelName: v.modelName,
         plateNo: v.plateNo,
+        fuel: v.fuel,
         zone: v.zone,
-        state: v.status === 'MAINTENANCE' ? 'MAINTENANCE' : active ? 'IN_USE' : 'AVAILABLE',
-        activeSince: active?.rental?.startedAt ?? null,
-        dueBack: active?.endAt ?? null,
+        state: current.state,
+        activeSince: active?.rental?.startedAt.toISOString() ?? null,
+        dueBack: active?.endAt.toISOString() ?? null,
+        telemetry: toTelemetryRes(current),
       };
     });
   }

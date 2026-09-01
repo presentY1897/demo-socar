@@ -8,6 +8,7 @@ import { storedPhotoSchema } from './photo';
 import { corpGradeSchema } from '../corp/grade';
 import { leaseStatusSchema } from '../corp/lease';
 import { insuranceTierSchema } from './reservation';
+import { opsVehicleStateSchema } from './telemetry';
 
 /**
  * API 응답 계약 — 웹/테스트가 공유하는 단일 소스.
@@ -18,6 +19,7 @@ import { insuranceTierSchema } from './reservation';
  */
 
 export const fuelTypeSchema = z.enum(['EV', 'GASOLINE', 'HYBRID']);
+export type FuelTypeValue = z.infer<typeof fuelTypeSchema>;
 export const vehicleStatusSchema = z.enum(['AVAILABLE', 'MAINTENANCE']);
 export const reservationStatusSchema = z.enum(['CONFIRMED', 'IN_USE', 'COMPLETED', 'CANCELED']);
 export const rentalStatusSchema = z.enum(['IN_USE', 'RETURN_PENDING', 'COMPLETED']);
@@ -231,6 +233,54 @@ export const rentalUsageSchema = z.object({
   smartKey: smartKeyStateSchema,
 });
 export type RentalUsageRes = z.infer<typeof rentalUsageSchema>;
+
+
+// ─────────────────────── 차량 텔레메트리 (M3-2) ───────────────────────
+
+/**
+ * 조회 시점의 차량 센서 값.
+ *
+ * 저장값 그대로가 아니라 "저장값 + 경과 시간 계산"의 결과다 — 운행 중인 차는 조회할 때마다
+ * 조금씩 움직이고 연료가 준다. 계산 규칙은 `apps/api/src/telemetry/telemetry-mock.ts` 한 곳에만 있다.
+ */
+export const vehicleTelemetrySchema = z.object({
+  /** 내연은 연료, EV는 배터리 잔량 (%) — 라벨은 fuelGaugeLabel()이 갈라 준다 */
+  fuelPct: z.number(),
+  odometerKm: z.number(),
+  doorLocked: z.boolean(),
+  engineOn: z.boolean(),
+  lat: z.number(),
+  lng: z.number(),
+  /** 이 값이 확정된 시각 (계산 기준점) */
+  updatedAt: z.string(),
+});
+export type VehicleTelemetryRes = z.infer<typeof vehicleTelemetrySchema>;
+
+/** SSE `/metrics/vehicles/live` 의 차량 1대 */
+export const liveVehicleSchema = z.object({
+  id: z.string(),
+  modelName: z.string(),
+  plateNo: z.string(),
+  fuel: fuelTypeSchema,
+  zone: z.object({
+    name: z.string(),
+    region: z.string(),
+    lat: z.number(),
+    lng: z.number(),
+  }),
+  state: opsVehicleStateSchema,
+  activeSince: z.string().nullable(),
+  dueBack: z.string().nullable(),
+  telemetry: vehicleTelemetrySchema,
+});
+export type LiveVehicleRes = z.infer<typeof liveVehicleSchema>;
+
+/** SSE 한 틱의 페이로드 (5초 주기) */
+export const liveVehiclesEventSchema = z.object({
+  ts: z.string(),
+  vehicles: z.array(liveVehicleSchema),
+});
+export type LiveVehiclesEvent = z.infer<typeof liveVehiclesEventSchema>;
 
 // ─────────────────────────── 계정 / 혜택 ───────────────────────────
 
