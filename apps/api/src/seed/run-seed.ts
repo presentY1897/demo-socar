@@ -1,7 +1,7 @@
 /**
  * 데모 시드 데이터.
  * - 전국 주요 도시의 존/차량 (region 키는 도로망 그래프 파일과 매칭)
- * - 데모 계정 5종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
+ * - 데모 계정 6종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
  * - 지표/배차 리스크 계산용 과거 이용 이력 (결정적 난수로 재현 가능)
  */
 import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus } from '@prisma/client';
@@ -17,8 +17,9 @@ import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
  *   v2: 실데이터 존 30곳 (전국주차장정보표준데이터 + OSM)
  *   v3: 이용 플로우 도메인 추가 (체크인/아웃·스마트키·문의·사고) — 재시드 시 신규 테이블도 함께 초기화
  *   v4: 법인 등급(corpGrade) 부여 + 리스 계약(LeaseContract) + viewer 계정
+ *   v5: approver 계정 추가 — 등급 4종을 계정 스위칭만으로 시연할 수 있게
  */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 interface ZoneDef {
   name: string;
@@ -193,6 +194,11 @@ export async function runSeed(prisma: PrismaClient) {
     }),
     prisma.user.create({
       data: { email: 'viewer@demo.mocar.kr', name: '한조회', role: Role.CORP_MEMBER, corporationId: corp.id, corpGrade: CorpGrade.VIEWER, passwordHash },
+    }),
+    // 승인만 하는 등급 — Role은 임직원(CORP_MEMBER)이지만 등급이 APPROVER라
+    // 승인/보드까지 가능하다. 권한이 Role이 아니라 등급에서 나온다는 걸 보여주는 계정.
+    prisma.user.create({
+      data: { email: 'approver@demo.mocar.kr', name: '정승인', role: Role.CORP_MEMBER, corporationId: corp.id, corpGrade: CorpGrade.APPROVER, passwordHash },
     }),
     prisma.user.create({
       data: { email: 'ops@demo.mocar.kr', name: '최운영', role: Role.OPS_ADMIN, passwordHash },
@@ -405,10 +411,11 @@ export async function runSeed(prisma: PrismaClient) {
     `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}, leases=${leaseCount}`,
   );
   console.log('demo accounts (pw: demo1234):');
-  console.log('  user@demo.mocar.kr   개인 이용자');
-  console.log('  viewer@demo.mocar.kr 법인 임직원 (등급 VIEWER — 조회만)');
-  console.log('  member@demo.mocar.kr 법인 임직원 (등급 REQUESTER — 배차 요청)');
-  console.log('  admin@demo.mocar.kr  법인 배차 담당 (등급 MANAGER — 멤버/플릿 관리)');
-  console.log('  ops@demo.mocar.kr    운영 어드민');
+  console.log('  user@demo.mocar.kr     개인 이용자');
+  console.log('  viewer@demo.mocar.kr   법인 임직원 (등급 VIEWER — 조회만)');
+  console.log('  member@demo.mocar.kr   법인 임직원 (등급 REQUESTER — 배차 요청)');
+  console.log('  approver@demo.mocar.kr 법인 임직원 (등급 APPROVER — 승인/보드)');
+  console.log('  admin@demo.mocar.kr    법인 배차 담당 (등급 MANAGER — 멤버/플릿 관리)');
+  console.log('  ops@demo.mocar.kr      운영 어드민');
 }
 

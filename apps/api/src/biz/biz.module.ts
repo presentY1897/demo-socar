@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DispatchModule } from './dispatch/dispatch.module';
+import { MembersModule } from './members/members.module';
 
 /**
  * MOCAR 비즈니스 — 법인 플릿/리스 관리 바운디드 컨텍스트.
@@ -10,6 +11,6 @@ import { DispatchModule } from './dispatch/dispatch.module';
  * 이후 M5 작업(멤버·플릿·리스)도 전부 이 모듈 하위에 추가한다.
  */
 @Module({
-  imports: [DispatchModule],
+  imports: [DispatchModule, MembersModule],
 })
 export class BizModule {}

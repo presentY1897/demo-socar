@@ -2,20 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import type { AuthUser } from '@socar/shared';
 import { useSession } from '@/lib/session';
 import { BizShell } from './BizShell';
 
 const NAV = [
   { href: '/', label: '홈', icon: '🗺️', show: () => true },
-  { href: '/reservations', label: '예약', icon: '🚗', show: (role?: string) => !!role },
+  { href: '/reservations', label: '예약', icon: '🚗', show: (user: AuthUser | null) => !!user },
+  // 비즈니스 진입은 등급 보유 여부로 — 역할이 아니라 등급이 법인 서비스의 자격이다
+  { href: '/biz', label: '비즈니스', icon: '🏢', show: (user: AuthUser | null) => !!user?.corpGrade },
+  { href: '/inquiries', label: '문의', icon: '💬', show: (user: AuthUser | null) => !!user },
   {
-    href: '/biz',
-    label: '비즈니스',
-    icon: '🏢',
-    show: (role?: string) => role === 'CORP_MEMBER' || role === 'CORP_ADMIN',
+    href: '/dashboard',
+    label: '지표',
+    icon: '📊',
+    show: (user: AuthUser | null) => user?.role === 'OPS_ADMIN',
   },
-  { href: '/inquiries', label: '문의', icon: '💬', show: (role?: string) => !!role },
-  { href: '/dashboard', label: '지표', icon: '📊', show: (role?: string) => role === 'OPS_ADMIN' },
 ];
 
 /**
@@ -34,7 +36,7 @@ function ConsumerShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const items = NAV.filter((n) => n.show(user?.role));
+  const items = NAV.filter((n) => n.show(user));
 
   return (
     <div className="flex min-h-dvh flex-col">

@@ -4,6 +4,7 @@ import { vehicleControlActionSchema } from './control';
 import { incidentStatusSchema, insuranceCoverageSchema } from './incident';
 import { inquiryCategorySchema, inquiryStatusSchema } from './inquiry';
 import { storedPhotoSchema } from './photo';
+import { corpGradeSchema } from '../corp/grade';
 import { insuranceTierSchema } from './reservation';
 
 /**
@@ -237,6 +238,8 @@ export const authUserSchema = z.object({
   name: z.string(),
   role: roleSchema,
   corporationId: z.string().nullable(),
+  /** 법인 미소속(개인/운영)은 null */
+  corpGrade: corpGradeSchema.nullable(),
 });
 
 /** `POST /auth/login` */
@@ -376,3 +379,18 @@ export const dispatchBoardSchema = z.object({
   ),
 });
 export type DispatchBoardRes = z.infer<typeof dispatchBoardSchema>;
+
+// ─────────────────────────── 비즈니스(법인) — 멤버 ───────────────────────────
+
+/** `GET /biz/members` 의 원소 · `PATCH /biz/members/:id/grade` 응답 */
+export const corpMemberSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string(),
+  role: roleSchema,
+  corpGrade: corpGradeSchema,
+  createdAt: z.string(),
+  /** 본인 행 — 자기 강등 금지 안내에 쓴다 */
+  isSelf: z.boolean(),
+});
+export type CorpMemberRes = z.infer<typeof corpMemberSchema>;

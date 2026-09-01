@@ -17,6 +17,6 @@ export class AuthController {
 
   @Get('me')
   me(@CurrentUser() user: JwtUser) {
-    return user;
+    return this.auth.me(user.id);
   }
 }

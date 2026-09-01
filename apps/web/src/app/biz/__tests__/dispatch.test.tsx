@@ -47,6 +47,24 @@ describe('/biz/dispatch — 법인 배차', () => {
     );
   });
 
+  it('승인 버튼은 approve 권한(APPROVER 이상)에게만 보인다', async () => {
+    const { unmount } = renderWithProviders(<BizDispatchPage />, {
+      user: MOCK_USERS.corpViewer,
+      pathname: '/biz/dispatch',
+    });
+    expect(await screen.findByText(dispatchRecommended.purpose)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '이 차량으로 승인' })).not.toBeInTheDocument();
+    unmount();
+
+    // 역할은 임직원이지만 등급이 APPROVER면 승인할 수 있다
+    renderWithProviders(<BizDispatchPage />, {
+      user: MOCK_USERS.corpApprover,
+      pathname: '/biz/dispatch',
+    });
+    expect(await screen.findByRole('button', { name: '이 차량으로 승인' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '요청 반려' })).toBeInTheDocument();
+  });
+
   it('배차 담당자: 후보를 골라 승인하면 승인 API로 후보 id가 간다', async () => {
     let approvedWith: unknown;
     server.use(

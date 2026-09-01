@@ -22,22 +22,29 @@ describe('BizShell — 분리된 비즈니스 셸', () => {
     expect(screen.getByRole('link', { name: '일반 서비스' })).toHaveAttribute('href', '/');
   });
 
-  it('임직원에게는 보드 탭이 없고 배차 담당자에게만 보인다', () => {
-    const { unmount } = renderWithProviders(<AppShell>본문</AppShell>, {
-      user: MOCK_USERS.corpMember,
-      pathname: '/biz/dispatch',
-    });
-    expect(screen.queryByRole('link', { name: /보드/ })).not.toBeInTheDocument();
-    unmount();
+  it('보드 탭은 역할이 아니라 등급(viewBoard 권한)으로 갈린다', () => {
+    // VIEWER·REQUESTER는 보드 권한이 없다
+    for (const user of [MOCK_USERS.corpViewer, MOCK_USERS.corpMember]) {
+      const { unmount } = renderWithProviders(<AppShell>본문</AppShell>, {
+        user,
+        pathname: '/biz/dispatch',
+      });
+      expect(screen.queryByRole('link', { name: /보드/ })).not.toBeInTheDocument();
+      unmount();
+    }
 
-    renderWithProviders(<AppShell>본문</AppShell>, {
-      user: MOCK_USERS.corpAdmin,
-      pathname: '/biz/dispatch',
-    });
-    expect(screen.getByRole('link', { name: /보드/ })).toHaveAttribute('href', '/biz/board');
+    // APPROVER는 Role이 임직원(CORP_MEMBER)인데도 등급 덕분에 보드가 보인다
+    for (const user of [MOCK_USERS.corpApprover, MOCK_USERS.corpAdmin]) {
+      const { unmount } = renderWithProviders(<AppShell>본문</AppShell>, {
+        user,
+        pathname: '/biz/dispatch',
+      });
+      expect(screen.getByRole('link', { name: /보드/ })).toHaveAttribute('href', '/biz/board');
+      unmount();
+    }
   });
 
-  it('법인 계정이 아니면 본문 대신 안내를 보여준다', () => {
+  it('등급이 없는 계정(개인·운영)은 본문 대신 안내를 보여준다', () => {
     renderWithProviders(<AppShell>비밀 본문</AppShell>, {
       user: MOCK_USERS.personal,
       pathname: '/biz/dispatch',

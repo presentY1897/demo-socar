@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { hasCorpPermission, type AuthUser, type CorpPermission } from '@socar/shared';
 import { useSession } from '@/lib/session';
 
 /**
@@ -15,28 +16,24 @@ interface BizNavItem {
   href: string;
   label: string;
   icon: string;
-  /** 노출 조건 — M5-3에서 등급 권한(CORP_PERMISSIONS) 기반으로 바뀐다 */
-  show: (role?: string) => boolean;
+  /** 이 탭을 보려면 필요한 법인 권한 — 판정은 shared CORP_PERMISSIONS 단일 소스 */
+  permission: CorpPermission;
 }
 
 const BIZ_NAV: BizNavItem[] = [
-  { href: '/biz/dispatch', label: '배차', icon: '🚘', show: () => true },
-  {
-    href: '/biz/board',
-    label: '보드',
-    icon: '📋',
-    show: (role) => role === 'CORP_ADMIN',
-  },
+  { href: '/biz/dispatch', label: '배차', icon: '🚘', permission: 'viewDispatch' },
+  { href: '/biz/board', label: '보드', icon: '📋', permission: 'viewBoard' },
 ];
 
-const isCorp = (role?: string) => role === 'CORP_MEMBER' || role === 'CORP_ADMIN';
+/** 법인 서비스 이용 자격 = 등급 보유 여부 (역할이 아니다) */
+const isBizUser = (user: AuthUser | null) => !!user?.corporationId && !!user.corpGrade;
 
 export function BizShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useSession();
   const pathname = usePathname();
   const router = useRouter();
 
-  const items = BIZ_NAV.filter((n) => n.show(user?.role));
+  const items = BIZ_NAV.filter((n) => hasCorpPermission(user?.corpGrade, n.permission));
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
@@ -73,7 +70,7 @@ export function BizShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex-1 pb-16">
-        {isCorp(user?.role) ? (
+        {isBizUser(user) ? (
           children
         ) : (
           <p className="py-16 text-center text-sm text-slate-400">
@@ -82,7 +79,7 @@ export function BizShell({ children }: { children: React.ReactNode }) {
         )}
       </main>
 
-      {isCorp(user?.role) && (
+      {isBizUser(user) && (
         <nav className="fixed inset-x-0 bottom-0 z-[1100] border-t border-slate-200 bg-white">
           <div className="mx-auto flex max-w-lg">
             {items.map((n) => {

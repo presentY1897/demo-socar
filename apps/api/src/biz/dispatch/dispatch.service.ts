@@ -206,12 +206,10 @@ export class DispatchService {
 
   async list(user: JwtUser) {
     if (!user.corporationId) throw new ForbiddenException('법인 소속이 아닙니다');
-    const where =
-      user.role === 'CORP_ADMIN'
-        ? { corporationId: user.corporationId }
-        : { requesterId: user.id };
+    // 조회 권한(viewDispatch)은 "법인 배차 현황"을 보는 권한이다 — 등급별로 범위를 더 쪼개지 않는다.
+    // 권한 자체는 CorpPermissionGuard가 이미 걸렀다.
     return this.prisma.dispatchRequest.findMany({
-      where,
+      where: { corporationId: user.corporationId },
       include: {
         requester: { select: { name: true, email: true } },
         candidates: { include: { vehicle: { include: { zone: true } } }, orderBy: { rank: 'asc' } },
@@ -233,21 +231,16 @@ export class DispatchService {
       },
     });
     if (!request) throw new NotFoundException('배차 요청을 찾을 수 없습니다');
-    const sameCorp = request.corporationId === user.corporationId;
-    const canView =
-      request.requesterId === user.id ||
-      (sameCorp && user.role === 'CORP_ADMIN') ||
-      user.role === 'OPS_ADMIN';
-    if (!canView) throw new ForbiddenException('조회 권한이 없습니다');
+    // 등급 권한은 가드가 판정했다. 여기서는 테넌시(다른 법인 침범)만 막는다.
+    if (request.corporationId !== user.corporationId) {
+      throw new ForbiddenException('다른 법인의 배차 요청은 조회할 수 없습니다');
+    }
     return request;
   }
 
   /** 담당자 승인 → 예약 생성 (예약과 동일한 동시성 방어를 그대로 통과) */
   async approve(admin: JwtUser, requestId: string, candidateId: string) {
-    const request = await this.detail(admin, requestId);
-    if (admin.role !== 'CORP_ADMIN' || request.corporationId !== admin.corporationId) {
-      throw new ForbiddenException('배차 담당자만 승인할 수 있습니다');
-    }
+    const request = await this.detail(admin, requestId); // 타 법인 요청은 여기서 403
     if (request.status !== 'RECOMMENDED') {
       throw new BadRequestException('결정 대기 상태의 요청만 승인할 수 있습니다');
     }
@@ -269,6 +262,7 @@ export class DispatchService {
           name: requester.name,
           role: requester.role,
           corporationId: requester.corporationId,
+          corpGrade: requester.corpGrade,
         },
         {
           vehicleId: candidate.vehicleId,
@@ -302,10 +296,7 @@ export class DispatchService {
   }
 
   async reject(admin: JwtUser, requestId: string, reason: string) {
-    const request = await this.detail(admin, requestId);
-    if (admin.role !== 'CORP_ADMIN' || request.corporationId !== admin.corporationId) {
-      throw new ForbiddenException('배차 담당자만 반려할 수 있습니다');
-    }
+    const request = await this.detail(admin, requestId); // 타 법인 요청은 여기서 403
     if (request.status !== 'RECOMMENDED' && request.status !== 'REQUESTED') {
       throw new BadRequestException('결정 대기 상태의 요청만 반려할 수 있습니다');
     }
@@ -322,9 +313,7 @@ export class DispatchService {
 
   /** 차량 × 시간 타임라인 보드 (KST 기준 하루) */
   async board(admin: JwtUser, date: string) {
-    if (admin.role !== 'CORP_ADMIN' || !admin.corporationId) {
-      throw new ForbiddenException('배차 담당자만 조회할 수 있습니다');
-    }
+    if (!admin.corporationId) throw new ForbiddenException('법인 소속이 아닙니다');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new BadRequestException('date=YYYY-MM-DD 형식이 필요합니다');
     }

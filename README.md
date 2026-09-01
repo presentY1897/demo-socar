@@ -102,11 +102,16 @@ pnpm dev                                # web :3000 + api :4000
 
 ### 데모 계정 (비밀번호 모두 `demo1234`)
 
-| 이메일 | 역할 | 볼 수 있는 것 |
+법인 계정은 전역 역할과 별개로 **법인 등급(VIEWER → REQUESTER → APPROVER → MANAGER)**을 갖는다.
+`/biz`(MOCAR 비즈니스)의 권한은 역할이 아니라 이 등급으로 결정되므로, 계정만 바꿔 가며 등급별 화면·권한을 비교할 수 있다.
+
+| 이메일 | 역할 / 법인 등급 | 볼 수 있는 것 |
 |---|---|---|
 | `user@demo.mocar.kr` | 개인 이용자 | 지도 탐색, 예약~반납, 쿠폰/크레딧 |
-| `member@demo.mocar.kr` | 법인 임직원 | 배차 요청, 추천 결과 확인 |
-| `admin@demo.mocar.kr` | 법인 배차 담당 | 추천 근거 검토, 승인/반려, 타임라인 보드 |
+| `viewer@demo.mocar.kr` | 법인 임직원 / `VIEWER` | `/biz` 배차 현황 조회만 (요청 생성 불가) |
+| `member@demo.mocar.kr` | 법인 임직원 / `REQUESTER` | + 배차 요청, 추천 결과 확인 |
+| `approver@demo.mocar.kr` | 법인 임직원 / `APPROVER` | + 추천 근거 검토, 승인/반려, 타임라인 보드 |
+| `admin@demo.mocar.kr` | 법인 배차 담당 / `MANAGER` | + 멤버 등급 관리, 플릿/리스 관리 |
 | `ops@demo.mocar.kr` | 운영 어드민 | 지표 대시보드, 실시간 차량 현황 |
 
 ## 테스트

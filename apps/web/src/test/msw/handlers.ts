@@ -41,7 +41,9 @@ import {
   smartKeyLocked,
   usageEmpty,
   userCorpAdmin,
+  userCorpApprover,
   userCorpMember,
+  userCorpViewer,
   userOpsAdmin,
   userPersonal,
   vehicleAvante,
@@ -72,6 +74,14 @@ const reservationsById = Object.fromEntries(
 
 const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
 const DEMO_ACCOUNTS = [userPersonal, userCorpMember, userCorpAdmin, userOpsAdmin];
+const DEMO_ACCOUNTS = [
+  userPersonal,
+  userCorpViewer,
+  userCorpMember,
+  userCorpApprover,
+  userCorpAdmin,
+  userOpsAdmin,
+];
 
 /**
  * 기본 핸들러 — 대부분의 화면이 이 상태에서 렌더된다.

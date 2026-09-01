@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
-import type { DispatchRequestRes } from '@socar/shared';
+import { hasCorpPermission, type DispatchRequestRes } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { DISPATCH_STATUS_LABEL, fmtDateTime, kstIso, todayKst } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -34,7 +34,8 @@ export default function BizDispatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const isAdmin = user?.role === 'CORP_ADMIN';
+  // 승인/반려 노출은 역할이 아니라 등급 권한으로 — shared CORP_PERMISSIONS 단일 소스
+  const canApprove = hasCorpPermission(user?.corpGrade, 'approve');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +89,7 @@ export default function BizDispatchPage() {
     <div className="mx-auto max-w-lg px-4 py-4">
       <h1 className="text-xl font-bold">배차</h1>
       <p className="mt-1 text-sm text-gray-500">
-        {isAdmin ? '배차 담당자 — 요청을 검토하고 근거와 함께 결정하세요' : '업무용 차량을 요청하면 담당자가 배정해요'}
+        {canApprove ? '배차 담당자 — 요청을 검토하고 근거와 함께 결정하세요' : '업무용 차량을 요청하면 담당자가 배정해요'}
       </p>
 
       {/* 요청 폼 */}
@@ -140,7 +141,7 @@ export default function BizDispatchPage() {
             </div>
             <p className="mt-1 text-sm text-gray-500">
               {fmtDateTime(r.desiredStartAt)} ~ {dayjs(r.desiredEndAt).format('HH:mm')}
-              {isAdmin && <span className="ml-2 text-xs text-gray-400">요청자 {r.requester.name}</span>}
+              {canApprove && <span className="ml-2 text-xs text-gray-400">요청자 {r.requester.name}</span>}
             </p>
             {r.rejectReason && <p className="mt-1 text-xs text-red-400">반려 사유: {r.rejectReason}</p>}
 
@@ -177,7 +178,7 @@ export default function BizDispatchPage() {
                         </li>
                       ))}
                     </ul>
-                    {isAdmin && (
+                    {canApprove && (
                       <button
                         disabled={busy}
                         onClick={() => decide(r.id, 'approve', c.id)}
@@ -188,7 +189,7 @@ export default function BizDispatchPage() {
                     )}
                   </div>
                 ))}
-                {isAdmin && (
+                {canApprove && (
                   <button
                     disabled={busy}
                     onClick={() => decide(r.id, 'reject')}

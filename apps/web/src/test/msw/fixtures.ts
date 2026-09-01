@@ -208,6 +208,7 @@ export const userPersonal = make(authUserSchema, {
   name: '김개인',
   role: 'USER',
   corporationId: null,
+  corpGrade: null,
 });
 
 export const userCorpAdmin = make(authUserSchema, {
@@ -216,6 +217,7 @@ export const userCorpAdmin = make(authUserSchema, {
   name: '박배차',
   role: 'CORP_ADMIN',
   corporationId: 'corp-1',
+  corpGrade: 'MANAGER',
 });
 
 export const userOpsAdmin = make(authUserSchema, {
@@ -224,6 +226,7 @@ export const userOpsAdmin = make(authUserSchema, {
   name: '이운영',
   role: 'OPS_ADMIN',
   corporationId: null,
+  corpGrade: null,
 });
 
 export const couponWelcome = make(couponSchema, {
@@ -452,9 +455,30 @@ export const userCorpMember = make(authUserSchema, {
   name: '이직원',
   role: 'CORP_MEMBER',
   corporationId: 'corp-1',
+  corpGrade: 'REQUESTER',
 });
 
 /** 결정 대기(RECOMMENDED) 요청 1건 — 담당자가 승인/반려할 수 있는 상태 */
+/** 조회만 가능한 등급 — 등급별 분기 테스트용 */
+export const userCorpViewer = make(authUserSchema, {
+  id: 'user-corp-viewer',
+  email: 'viewer@demo.mocar.kr',
+  name: '한조회',
+  role: 'CORP_MEMBER',
+  corporationId: 'corp-1',
+  corpGrade: 'VIEWER',
+});
+
+/** 역할은 임직원이지만 등급이 APPROVER — 권한이 Role이 아니라 등급에서 나온다 */
+export const userCorpApprover = make(authUserSchema, {
+  id: 'user-corp-approver',
+  email: 'approver@demo.mocar.kr',
+  name: '정승인',
+  role: 'CORP_MEMBER',
+  corporationId: 'corp-1',
+  corpGrade: 'APPROVER',
+});
+
 export const dispatchRecommended = make(dispatchRequestSchema, {
   id: 'disp-1',
   purpose: '판교 거래처 미팅',

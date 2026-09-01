@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CorpGrade } from '../corp/grade';
 
 export const UserRole = {
   USER: 'USER',
@@ -20,6 +21,8 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   corporationId: string | null;
+  /** 법인 내 등급 — 법인 미소속(개인/운영)은 null. 권한 판정은 CORP_PERMISSIONS 단일 소스 */
+  corpGrade: CorpGrade | null;
 }
 
 export interface LoginResponse {

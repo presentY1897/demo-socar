@@ -5,10 +5,14 @@ import { useState } from 'react';
 import type { LoginResponse } from '@socar/shared';
 import { api, ApiError, setSession } from '@/lib/api';
 
+// 법인 계정은 등급(VIEWER→REQUESTER→APPROVER→MANAGER)까지 표기한다 —
+// /biz 권한이 역할이 아니라 등급에서 나오는 걸 계정 스위칭으로 확인할 수 있게.
 const DEMO_ACCOUNTS = [
   { email: 'user@demo.mocar.kr', label: '개인 이용자' },
-  { email: 'member@demo.mocar.kr', label: '법인 임직원' },
-  { email: 'admin@demo.mocar.kr', label: '법인 배차 담당' },
+  { email: 'viewer@demo.mocar.kr', label: '법인 · 조회' },
+  { email: 'member@demo.mocar.kr', label: '법인 · 요청' },
+  { email: 'approver@demo.mocar.kr', label: '법인 · 승인' },
+  { email: 'admin@demo.mocar.kr', label: '법인 · 관리자' },
   { email: 'ops@demo.mocar.kr', label: '운영 어드민' },
 ];
 

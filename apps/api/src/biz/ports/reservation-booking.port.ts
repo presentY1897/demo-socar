@@ -1,4 +1,4 @@
-import type { UserRole } from '@socar/shared';
+import type { CorpGrade, UserRole } from '@socar/shared';
 
 /**
  * biz(MOCAR 비즈니스) → 소비자 도메인으로 나가는 유일한 서비스 호출 창구.
@@ -15,6 +15,7 @@ export interface BookingActor {
   name: string;
   role: UserRole;
   corporationId: string | null;
+  corpGrade: CorpGrade | null;
 }
 
 export interface BookingRequest {

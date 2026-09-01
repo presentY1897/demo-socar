@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
-import type { UserRole } from '@socar/shared';
+import type { CorpGrade, UserRole } from '@socar/shared';
 import { IS_PUBLIC_KEY } from './decorators';
 
 export interface JwtUser {
@@ -11,6 +11,11 @@ export interface JwtUser {
   name: string;
   role: UserRole;
   corporationId: string | null;
+  /**
+   * 로그인 시점의 법인 등급. 웹의 화면 분기용이고, **권한 판정의 근거는 아니다** —
+   * 판정은 CorpPermissionGuard가 DB에서 다시 읽는다 (등급 변경 즉시 반영).
+   */
+  corpGrade: CorpGrade | null;
 }
 
 @Injectable()
@@ -39,6 +44,7 @@ export class JwtAuthGuard implements CanActivate {
         name: payload.name,
         role: payload.role,
         corporationId: payload.corporationId,
+        corpGrade: payload.corpGrade ?? null,
       };
       return true;
     } catch {
