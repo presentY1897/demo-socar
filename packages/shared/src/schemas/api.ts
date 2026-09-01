@@ -8,6 +8,7 @@ import { storedPhotoSchema } from './photo';
 import { corpGradeSchema } from '../corp/grade';
 import { leaseStatusSchema } from '../corp/lease';
 import { opsAlertKindSchema, opsAlertSeveritySchema, opsTabSchema } from './ops';
+import { reportGroupBySchema, reportMetricSchema, reportUnitSchema } from './report';
 import { insuranceTierSchema } from './reservation';
 import { opsVehicleStateSchema } from './telemetry';
 
@@ -802,6 +803,53 @@ export const metricsDailyRowSchema = z.object({
   revenueKrw: z.number().int(),
 });
 export type MetricsDailyRowRes = z.infer<typeof metricsDailyRowSchema>;
+
+// ─────────────────────── 리포트 빌더 (/ops/reports · M4-2) ───────────────────────
+
+/**
+ * 리포트 한 줄 — 차트의 점 하나이자 표의 한 행이자 CSV의 한 줄.
+ * `key`는 리렌더·정렬에 안정적인 식별자(일자 `2026-08-01` · 존 id · 차종명),
+ * `label`은 사람이 읽는 이름이다. 축 눈금을 줄이는 일(`8/1`)은 화면이 한다.
+ */
+export const reportRowSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  value: z.number(),
+});
+export type ReportRowRes = z.infer<typeof reportRowSchema>;
+
+/**
+ * `GET /ops/reports` — 지표 5종을 같은 형태로 낸다.
+ *
+ * 차트·표·Export가 이 한 응답을 나눠 쓴다. 화면마다 다른 응답을 받으면 "차트에는 있는데
+ * 내려받은 CSV에는 없는 행"이 생긴다.
+ */
+export const reportResponseSchema = z.object({
+  meta: z.object({
+    metric: reportMetricSchema,
+    groupBy: reportGroupBySchema,
+    /** 값의 단위 — 축·툴팁·CSV 헤더가 이걸 보고 표기를 고른다 */
+    unit: reportUnitSchema,
+    /** 조회한 KST 달력 구간 (양끝 포함) */
+    range: z.object({ from: z.string(), to: z.string() }),
+    /** 적용된 필터를 되돌려 준다 — 내려받은 파일만 보고도 무슨 조건인지 알 수 있게 */
+    filters: z.object({ zoneId: z.string().nullable(), model: z.string().nullable() }),
+    /**
+     * 전체 값. 합계(원·건)이거나 **가중 평균**(%)이다 —
+     * 비율 지표의 행 평균은 분모가 다른 값을 평균 내는 셈이라 쓰지 않는다.
+     */
+    total: z.number(),
+  }),
+  rows: z.array(reportRowSchema),
+});
+export type ReportResponseRes = z.infer<typeof reportResponseSchema>;
+
+/** `GET /ops/reports/options` — 필터 폼의 선택지 (존·차종은 시드가 만든 값이라 화면이 적을 수 없다) */
+export const reportOptionsSchema = z.object({
+  zones: z.array(z.object({ id: z.string(), name: z.string() })),
+  models: z.array(z.string()),
+});
+export type ReportOptionsRes = z.infer<typeof reportOptionsSchema>;
 
 // ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
 

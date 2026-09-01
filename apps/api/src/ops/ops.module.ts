@@ -5,6 +5,7 @@ import { OpsFleetModule } from './fleet/ops-fleet.module';
 import { OpsInquiriesModule } from './inquiries/ops-inquiries.module';
 import { OpsLeasesController } from './leases/leases.controller';
 import { OpsLeasesService } from './leases/leases.service';
+import { OpsReportsModule } from './reports/ops-reports.module';
 import { OpsTasksModule } from './tasks/ops-tasks.module';
 import { OpsUsersModule } from './users/ops-users.module';
 import { OpsZonesModule } from './zones/ops-zones.module';
@@ -25,6 +26,7 @@ import { OpsZonesModule } from './zones/ops-zones.module';
     OpsInquiriesModule, // 문의함 (M3-3)
     OpsAccountingModule, // 회계 (M3-3)
     OpsAlertsModule, // 운영 홈 스탯 + 경고 피드 (M3-3)
+    OpsReportsModule, // 리포트 빌더 (M4-2)
   ],
   controllers: [OpsLeasesController],
   providers: [OpsLeasesService],
