@@ -8,14 +8,16 @@ import { PrismaClient, Role, FuelType, InsuranceTier, ReservationStatus, RentalS
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
 
 /**
  * 시드 데이터 버전. 시드 내용(존/차량/계정 구성)이 바뀌면 +1 —
  * 배포 환경에서 DB에 기록된 버전과 비교해 자동으로 1회 재시드된다 (main.ts).
  *   v1: 초기 시드 (수동 존 10곳)
  *   v2: 실데이터 존 30곳 (전국주차장정보표준데이터 + OSM)
+ *   v3: 이용 플로우 도메인 추가 (체크인/아웃·스마트키·문의·사고) — 재시드 시 신규 테이블도 함께 초기화
  */
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 interface ZoneDef {
   name: string;
@@ -78,6 +80,12 @@ export async function runSeed(prisma: PrismaClient) {
   await prisma.$transaction([
     prisma.dispatchCandidate.deleteMany(),
     prisma.dispatchRequest.deleteMany(),
+    prisma.incidentPhoto.deleteMany(),
+    prisma.incidentReport.deleteMany(),
+    prisma.conditionPhoto.deleteMany(),
+    prisma.conditionReport.deleteMany(),
+    prisma.vehicleControlLog.deleteMany(),
+    prisma.inquiry.deleteMany(),
     prisma.payment.deleteMany(),
     prisma.rental.deleteMany(),
     prisma.reservation.deleteMany(),
@@ -335,7 +343,17 @@ export async function runSeed(prisma: PrismaClient) {
     update: { version: SEED_VERSION, seededAt: new Date() },
   });
 
-  console.log(`seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}`);
+  // 차종별 매뉴얼(모의 콘텐츠)은 DB가 아니라 API 정적 데이터로 관리한다 —
+  // 시드에 새 차종을 넣고 매뉴얼을 빠뜨리면 여기서 바로 드러난다.
+  const seededModels = [...new Set((await prisma.vehicle.findMany({ select: { modelName: true } })).map((v) => v.modelName))];
+  const missingManuals = seededModels.filter((m) => !MANUAL_MODEL_NAMES.includes(m));
+  if (missingManuals.length > 0) {
+    console.warn(`⚠️ 매뉴얼 콘텐츠 없는 차종: ${missingManuals.join(', ')} (src/vehicles/vehicle-manual.ts)`);
+  }
+
+  console.log(
+    `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}`,
+  );
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr   개인 이용자');
   console.log('  member@demo.mocar.kr 법인 임직원');

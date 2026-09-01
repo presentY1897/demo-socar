@@ -51,7 +51,7 @@
 
 | 상태 | ID | 작업 | 의존 |
 |---|---|---|---|
-| ☐ | [M1-1](task/m1-1-domain-migration.md) | 도메인 마이그레이션 — ConditionReport·ControlLog·Inquiry·Incident 등 | — |
+| ☑ | [M1-1](task/m1-1-domain-migration.md) | 도메인 마이그레이션 — ConditionReport·ControlLog·Inquiry·Incident 등 | — |
 | ☐ | [M1-2](task/m1-2-photo-pipeline.md) | 사진 업로드 파이프라인 — PhotoCapture 압축→DB 저장 공통 경로 | M0-2, M1-1 |
 | ☐ | [M1-3](task/m1-3-checkin-checkout.md) | 체크인/체크아웃 API + 예약 상세 단계형 UI | M1-2 |
 | ☐ | [M1-4](task/m1-4-smart-key.md) | 가상 스마트키 — 문열림/잠금/비상등/경적 + 시동(확정) | M1-3 |
@@ -113,11 +113,11 @@
 | 마일스톤 | 활성 작업 | 완료 | 상태 |
 |---|---|---|---|
 | M0 기반 정비 | 1 (+취소 1) | 1 | ✅ 완료 |
-| M1 이용 플로우 | 8 | 0 | 대기 |
+| M1 이용 플로우 | 8 | 1 | 진행 중 |
 | M2 핸들러 | 6 | 0 | 대기 |
 | M3 백오피스 | 7 | 0 | 대기 |
 | M4 지표·Export | 5 | 0 | 대기 |
 | M5 MOCAR 비즈니스 | 6 | 0 | 대기 |
-| **계** | **33** | **1** | |
+| **계** | **33** | **2** | |
 
 작성 기준: [project-review.md](project-review.md) §5 v2 로드맵 + 1·2차 피드백(2026-09-01). 문서 체계: [adr/](adr/) = 설계 결정 기록(왜) / [task/](task/) = 실행 작업 문서(무엇을·어떻게) / 이 파일 = 인덱스.

@@ -41,6 +41,7 @@ model User {
   creditLedger     CreditLedger[]
   dispatchRequests DispatchRequest[] @relation("requester")
   dispatchDecided  DispatchRequest[] @relation("decider")
+  inquiries        Inquiry[]
 }
 
 model Corporation {
@@ -109,11 +110,18 @@ model Vehicle {
   planId        String
   corporationId String? // 값이 있으면 법인 소유/장기렌트 차량 (FMS) — 이용 과금 없음
 
+  // 가상 스마트키(M1-4) 조작 결과를 담는 임시 상태 필드.
+  // ⚠️ M3-1에서 VehicleTelemetry(연료·주행거리·좌표 포함)로 통합 예정 — 그때 이 두 필드는 제거된다.
+  doorLocked Boolean @default(true)
+  engineOn   Boolean @default(false)
+
   zone               Zone                @relation(fields: [zoneId], references: [id])
   plan               PricingPlan         @relation(fields: [planId], references: [id])
   corporation        Corporation?        @relation(fields: [corporationId], references: [id])
   reservations       Reservation[]
   dispatchCandidates DispatchCandidate[]
+  controlLogs        VehicleControlLog[]
+  inquiries          Inquiry[]
 }
 
 // ─────────────────────────── 예약 / 대여 ───────────────────────────
@@ -189,7 +197,139 @@ model Rental {
   driveFeeKrw   Int?
   lateFeeKrw    Int?
 
-  reservation Reservation @relation(fields: [reservationId], references: [id])
+  reservation      Reservation         @relation(fields: [reservationId], references: [id])
+  conditionReports ConditionReport[]
+  controlLogs      VehicleControlLog[]
+  incidents        IncidentReport[]
+  inquiries        Inquiry[]
+}
+
+// ─────────────────────────── 이용 플로우 (체크인/아웃 · 스마트키) ───────────────────────────
+
+enum ConditionPhase {
+  CHECK_IN // 이용 시작 전 차량 상태 보고 — 제출해야 스마트키 활성화
+  CHECK_OUT // 반납 주차 상태 보고 — 제출해야 반납 가능
+}
+
+model ConditionReport {
+  id          String         @id @default(cuid())
+  rentalId    String
+  phase       ConditionPhase
+  notes       String? // 차량 상태 메모 (흠집/청결 등)
+  parkingNote String? // 반납 위치 설명 (층/구역) — CHECK_OUT 전용
+  createdAt   DateTime       @default(now())
+
+  rental Rental           @relation(fields: [rentalId], references: [id])
+  photos ConditionPhoto[]
+
+  @@index([rentalId, phase])
+}
+
+// 클라이언트에서 1280px/JPEG로 압축한 사진을 base64 텍스트로 DB에 보관한다
+// (외부 스토리지 의존 없이 무료 티어에서 동작 — project-review §6-Q2).
+model ConditionPhoto {
+  id        String   @id @default(cuid())
+  reportId  String
+  mime      String // 예: "image/jpeg"
+  data      String // base64 인코딩 원본 (압축 후 장당 ~200KB 제한)
+  bytes     Int // 디코딩 기준 바이트 수
+  createdAt DateTime @default(now())
+
+  report ConditionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+enum VehicleControlAction {
+  UNLOCK // 문 열기
+  LOCK // 문 잠금
+  HAZARD // 비상등
+  HORN // 경적
+  IGNITION_ON // 시동 켜기
+  IGNITION_OFF // 시동 끄기
+}
+
+model VehicleControlLog {
+  id        String               @id @default(cuid())
+  rentalId  String
+  vehicleId String
+  action    VehicleControlAction
+  at        DateTime             @default(now())
+
+  rental  Rental  @relation(fields: [rentalId], references: [id])
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([rentalId, at])
+  @@index([vehicleId, at])
+}
+
+// ─────────────────────────── 문의 / 사고 접수 ───────────────────────────
+
+enum InquiryCategory {
+  VEHICLE // 차량 상태·장비
+  RESERVATION // 예약·결제
+  RETURN // 반납·정산
+  ACCIDENT // 사고·보험
+  ETC
+}
+
+enum InquiryStatus {
+  OPEN // 접수 — 운영 답변 대기
+  ANSWERED // 운영 백오피스(M3) 문의함에서 답변 완료
+}
+
+model Inquiry {
+  id         String          @id @default(cuid())
+  userId     String
+  vehicleId  String? // 차량 문의인 경우
+  rentalId   String? // 이용 중 문의인 경우
+  category   InquiryCategory
+  body       String
+  status     InquiryStatus   @default(OPEN)
+  answer     String?
+  answeredAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
+  rental  Rental?  @relation(fields: [rentalId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum IncidentStatus {
+  RECEIVED // 접수
+  PROCESSING // 처리 중
+  CLOSED // 종결
+}
+
+// 사고 접수(모의) — 가입 면책상품/자기부담금 안내는 예약의 insurance 스냅샷에서 파생한다
+model IncidentReport {
+  id          String         @id @default(cuid())
+  rentalId    String
+  description String
+  status      IncidentStatus @default(RECEIVED)
+  createdAt   DateTime       @default(now())
+
+  rental Rental          @relation(fields: [rentalId], references: [id])
+  photos IncidentPhoto[]
+
+  @@index([rentalId])
+}
+
+// ConditionPhoto와 같은 저장 규격(압축 base64) — 업로드 경로(M1-2)를 공유한다
+model IncidentPhoto {
+  id         String   @id @default(cuid())
+  incidentId String
+  mime       String
+  data       String
+  bytes      Int
+  createdAt  DateTime @default(now())
+
+  incident IncidentReport @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
 }
 
 // ─────────────────────────── 결제 / 할인 ───────────────────────────
