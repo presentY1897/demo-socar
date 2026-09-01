@@ -23,6 +23,7 @@ interface BizNavItem {
 const BIZ_NAV: BizNavItem[] = [
   { href: '/biz/dispatch', label: '배차', icon: '🚘', permission: 'viewDispatch' },
   { href: '/biz/board', label: '보드', icon: '📋', permission: 'viewBoard' },
+  { href: '/biz/members', label: '멤버', icon: '👥', permission: 'manageMembers' },
 ];
 
 /** 법인 서비스 이용 자격 = 등급 보유 여부 (역할이 아니다) */

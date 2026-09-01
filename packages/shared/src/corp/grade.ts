@@ -121,6 +121,14 @@ export function corpGradeRank(grade: CorpGrade): number {
 }
 
 /**
+ * 그 권한을 갖는 가장 낮은 등급 — 권한 없음 안내에서 "어느 등급부터 되는지"를 알려줄 때 쓴다.
+ * 문구를 손으로 적지 않고 등급표에서 끌어오므로 안내와 실제 판정이 갈라지지 않는다.
+ */
+export function minimumGradeFor(permission: CorpPermission): CorpGrade | null {
+  return CORP_GRADES.find((grade) => CORP_PERMISSIONS[grade][permission]) ?? null;
+}
+
+/**
  * 등급이 없는 기존 계정의 폴백 매핑 (마이그레이션 백필과 같은 규칙).
  * CORP_MEMBER→REQUESTER, CORP_ADMIN→MANAGER, 그 외 법인 미소속은 null.
  */

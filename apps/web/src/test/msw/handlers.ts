@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import {
   availabilitySchema,
   conditionReportSchema,
+  corpMemberSchema,
   creditSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
@@ -26,6 +27,7 @@ import {
   allZones,
   conditionCheckIn,
   conditionCheckOut,
+  corpMembers,
   couponWelcome,
   rentalCompleted,
   rentalInUse,
@@ -239,6 +241,20 @@ export const handlers = [
   ),
 
   http.get(url('/biz/dispatch/board'), () => json(dispatchBoardSchema, dispatchBoard)),
+
+  // ── 비즈니스(법인) 멤버 · 등급 ──────────────────
+  http.get(url('/biz/members'), () =>
+    HttpResponse.json(corpMembers.map((m) => corpMemberSchema.parse(m))),
+  ),
+
+  http.patch(url('/biz/members/:id/grade'), async ({ params, request }) => {
+    const { grade } = (await request.json()) as { grade: string };
+    const target = corpMembers.find((m) => m.id === params.id);
+    if (!target) {
+      return HttpResponse.json({ message: '법인 멤버를 찾을 수 없습니다' }, { status: 404 });
+    }
+    return json(corpMemberSchema, { ...target, corpGrade: grade });
+  }),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

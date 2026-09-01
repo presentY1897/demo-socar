@@ -4,6 +4,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import type { DispatchBoardRes } from '@socar/shared';
+import { BizPermissionGate } from '@/components/BizPermissionGate';
 import { swrFetcher } from '@/lib/api';
 import { DISPATCH_STATUS_LABEL, fmtTime, todayKst } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -16,17 +17,22 @@ function pos(date: string, iso: string) {
 }
 
 export default function BoardPage() {
-  const { user, ready } = useSession();
+  // 탭을 숨겨도 URL로는 들어올 수 있다 — 권한 판정은 게이트가 API와 같은 기준으로 한다
+  return (
+    <BizPermissionGate permission="viewBoard">
+      <BoardView />
+    </BizPermissionGate>
+  );
+}
+
+function BoardView() {
+  const { user } = useSession();
   const [date, setDate] = useState(todayKst());
   const { data } = useSWR<DispatchBoardRes>(
-    user?.role === 'CORP_ADMIN' ? `/biz/dispatch/board?date=${date}` : null,
+    user ? `/biz/dispatch/board?date=${date}` : null,
     swrFetcher,
     { refreshInterval: 15000 },
   );
-
-  if (ready && user?.role !== 'CORP_ADMIN') {
-    return <p className="py-16 text-center text-sm text-gray-400">배차 담당자 계정으로 로그인하세요</p>;
-  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-4">

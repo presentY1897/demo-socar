@@ -1,6 +1,7 @@
 import {
   authUserSchema,
   conditionReportSchema,
+  corpMemberSchema,
   couponSchema,
   paymentSchema,
   dispatchRequestSchema,
@@ -541,3 +542,24 @@ export const dispatchBoard = make(dispatchBoardSchema, {
     },
   ],
 });
+
+// ─────────────────── 비즈니스(법인) 멤버 · 등급 ───────────────────
+
+/** `GET /biz/members` — MANAGER(박배차) 시점의 법인 멤버 4종 */
+const member = (user: typeof userCorpViewer, createdAt: string) =>
+  make(corpMemberSchema, {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    corpGrade: user.corpGrade,
+    createdAt,
+    isSelf: user.id === userCorpAdmin.id,
+  });
+
+export const corpMembers = [
+  member(userCorpAdmin, '2029-01-01T00:00:00.000Z'),
+  member(userCorpMember, '2029-02-01T00:00:00.000Z'),
+  member(userCorpApprover, '2029-03-01T00:00:00.000Z'),
+  member(userCorpViewer, '2029-04-01T00:00:00.000Z'),
+];

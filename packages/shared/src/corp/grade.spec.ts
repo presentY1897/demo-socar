@@ -7,6 +7,7 @@ import {
   corpGradeFromRole,
   corpGradeRank,
   hasCorpPermission,
+  minimumGradeFor,
   updateCorpGradeSchema,
   type CorpPermission,
 } from './grade';
@@ -96,5 +97,29 @@ describe('updateCorpGradeSchema', () => {
   it('정의된 등급만 허용한다', () => {
     expect(updateCorpGradeSchema.parse({ grade: 'APPROVER' }).grade).toBe('APPROVER');
     expect(updateCorpGradeSchema.safeParse({ grade: 'OWNER' }).success).toBe(false);
+  });
+});
+
+describe('minimumGradeFor — 권한을 갖는 최저 등급', () => {
+  it('권한별 최저 등급을 등급표에서 끌어온다', () => {
+    expect(minimumGradeFor('viewDispatch')).toBe(CorpGrade.VIEWER);
+    expect(minimumGradeFor('createRequest')).toBe(CorpGrade.REQUESTER);
+    expect(minimumGradeFor('approve')).toBe(CorpGrade.APPROVER);
+    expect(minimumGradeFor('viewBoard')).toBe(CorpGrade.APPROVER);
+    expect(minimumGradeFor('manageMembers')).toBe(CorpGrade.MANAGER);
+    expect(minimumGradeFor('manageFleet')).toBe(CorpGrade.MANAGER);
+  });
+
+  it('최저 등급 이상은 모두 그 권한을 갖는다 (등급이 서열대로 누적된다)', () => {
+    const permissions = Object.keys(CORP_PERMISSIONS.MANAGER) as CorpPermission[];
+    for (const permission of permissions) {
+      const min = minimumGradeFor(permission);
+      expect(min).not.toBeNull();
+      for (const grade of CORP_GRADES) {
+        expect(hasCorpPermission(grade, permission)).toBe(
+          corpGradeRank(grade) >= corpGradeRank(min!),
+        );
+      }
+    }
   });
 });

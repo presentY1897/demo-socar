@@ -16,13 +16,13 @@ describe('/biz/board — 배차 타임라인', () => {
     expect(screen.getAllByText(dispatchBoard.requests[0].purpose).length).toBeGreaterThan(0);
   });
 
-  it('담당자가 아니면 안내만 보여주고 보드를 호출하지 않는다', () => {
-    // 핸들러를 타면 onUnhandledRequest 설정과 무관하게 호출 자체가 없어야 하므로
-    // SWR 키를 null로 두는 분기(담당자 아님)를 화면으로 확인한다
+  it('viewBoard 권한이 없으면 안내만 보여주고 보드를 호출하지 않는다', () => {
+    // 게이트가 본문 자체를 렌더하지 않으므로 SWR 호출도 일어나지 않는다
+    // (핸들러를 타면 MSW의 onUnhandledRequest와 무관하게 화면이 달라진다)
     renderWithProviders(<BoardPage />, {
       user: MOCK_USERS.corpMember,
       pathname: '/biz/board',
     });
-    expect(screen.getByText('배차 담당자 계정으로 로그인하세요')).toBeInTheDocument();
+    expect(screen.getByText('접근 권한이 없어요')).toBeInTheDocument();
   });
 });

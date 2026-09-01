@@ -4,6 +4,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import { hasCorpPermission, type DispatchRequestRes } from '@socar/shared';
+import { BizPermissionGate } from '@/components/BizPermissionGate';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { DISPATCH_STATUS_LABEL, fmtDateTime, kstIso, todayKst } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -21,6 +22,14 @@ const TIMES = Array.from({ length: 48 }, (_, i) =>
 );
 
 export default function BizDispatchPage() {
+  return (
+    <BizPermissionGate permission="viewDispatch">
+      <DispatchView />
+    </BizPermissionGate>
+  );
+}
+
+function DispatchView() {
   const { user } = useSession();
   const { data: requests, mutate } = useSWR<DispatchRequestRes[]>(
     user ? '/biz/dispatch/requests' : null,
@@ -34,8 +43,9 @@ export default function BizDispatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 승인/반려 노출은 역할이 아니라 등급 권한으로 — shared CORP_PERMISSIONS 단일 소스
+  // 승인/반려·요청 생성 노출은 역할이 아니라 등급 권한으로 — shared CORP_PERMISSIONS 단일 소스
   const canApprove = hasCorpPermission(user?.corpGrade, 'approve');
+  const canCreate = hasCorpPermission(user?.corpGrade, 'createRequest');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,42 +99,48 @@ export default function BizDispatchPage() {
     <div className="mx-auto max-w-lg px-4 py-4">
       <h1 className="text-xl font-bold">배차</h1>
       <p className="mt-1 text-sm text-gray-500">
-        {canApprove ? '배차 담당자 — 요청을 검토하고 근거와 함께 결정하세요' : '업무용 차량을 요청하면 담당자가 배정해요'}
+        {canApprove
+          ? '배차 담당자 — 요청을 검토하고 근거와 함께 결정하세요'
+          : canCreate
+            ? '업무용 차량을 요청하면 담당자가 배정해요'
+            : '조회 등급이에요 — 법인 배차 현황만 볼 수 있어요'}
       </p>
 
-      {/* 요청 폼 */}
-      <form onSubmit={submit} className="mt-4 rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">차량 요청</h2>
-        <input
-          value={purpose}
-          onChange={(e) => setPurpose(e.target.value)}
-          placeholder="사용 목적 (예: 판교 거래처 미팅)"
-          className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-        <div className="mt-2 flex gap-2">
+      {/* 요청 폼 — createRequest 권한(REQUESTER 이상)에게만 보인다 */}
+      {canCreate && (
+        <form onSubmit={submit} className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+          <h2 className="font-semibold">차량 요청</h2>
           <input
-            type="date"
-            value={date}
-            min={todayKst()}
-            onChange={(e) => setDate(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            placeholder="사용 목적 (예: 판교 거래처 미팅)"
+            className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <select value={startTime} onChange={(e) => setStartTime(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
-            {TIMES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-          <span className="self-center text-gray-400">~</span>
-          <select value={endTime} onChange={(e) => setEndTime(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
-            {TIMES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-        <button
-          disabled={busy || !purpose}
-          className="mt-3 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-        >
-          {busy ? '처리 중...' : '요청하고 추천받기'}
-        </button>
-      </form>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="date"
+              value={date}
+              min={todayKst()}
+              onChange={(e) => setDate(e.target.value)}
+              className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+            />
+            <select value={startTime} onChange={(e) => setStartTime(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+              {TIMES.map((t) => <option key={t}>{t}</option>)}
+            </select>
+            <span className="self-center text-gray-400">~</span>
+            <select value={endTime} onChange={(e) => setEndTime(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+              {TIMES.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          <button
+            disabled={busy || !purpose}
+            className="mt-3 w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? '처리 중...' : '요청하고 추천받기'}
+          </button>
+        </form>
+      )}
 
       {/* 요청 목록 */}
       <div className="mt-5 space-y-3">
