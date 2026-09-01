@@ -3,8 +3,10 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { OPS_TAB_LABEL, opsTabSchema, type OpsTab } from '@socar/shared';
+import { OpsCustomersTab } from '@/components/ops/OpsCustomersTab';
 import { OpsFleetTab } from '@/components/ops/OpsFleetTab';
 import { OpsHomeTab } from '@/components/ops/OpsHomeTab';
+import { OpsZonesTab } from '@/components/ops/OpsZonesTab';
 import { useSession } from '@/lib/session';
 
 /**
@@ -72,15 +74,15 @@ function OpsCenter() {
         {tab === 'home' && <OpsHomeTab onNavigate={goto} />}
         {tab === 'fleet' && <OpsFleetTab targetId={targetId} />}
         {tab === 'dispatch' && <Placeholder tab="dispatch" />}
-        {tab === 'zones' && <Placeholder tab="zones" />}
-        {tab === 'customers' && <Placeholder tab="customers" />}
+        {tab === 'zones' && <OpsZonesTab targetId={targetId} />}
+        {tab === 'customers' && <OpsCustomersTab targetId={targetId} />}
         {tab === 'accounting' && <Placeholder tab="accounting" />}
       </div>
     </div>
   );
 }
 
-/** M3-5·M3-6이 채운다 — 탭 셸은 M3-4에서 먼저 선다 */
+/** M3-6이 채운다 */
 function Placeholder({ tab }: { tab: OpsTab }) {
   return (
     <p className="py-16 text-center text-sm text-gray-400">
