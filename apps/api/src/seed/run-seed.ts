@@ -77,6 +77,19 @@ function mulberry32(seed: number) {
 const rand = mulberry32(20260831);
 const pick = <T>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
 
+/**
+ * 한꺼번에 만든 시드 행을 **이름으로** 되찾는다.
+ *
+ * `const [a, b] = await Promise.all([...])` 식의 위치 기반 구조 분해는 중간에 항목이
+ * 하나 끼어들면 이름과 실체가 조용히 어긋난다 — 실제로 계정 배열에서 한 번 터졌다
+ * (M5가 법인 등급 계정을 추가하자 핸들러 작업이 승인자에게 배정됐다).
+ */
+function seeded<T, K extends keyof T>(rows: T[], key: K, value: T[K]): T {
+  const found = rows.find((row) => row[key] === value);
+  if (!found) throw new Error(`시드 데이터 누락: ${String(key)}=${String(value)}`);
+  return found;
+}
+
 export async function runSeed(prisma: PrismaClient) {
   console.log('seeding...');
 
@@ -106,7 +119,7 @@ export async function runSeed(prisma: PrismaClient) {
   ]);
 
   // ── 요금제 ──
-  const [planLight, planCompact, planEv, planSuv] = await Promise.all([
+  const plans = await Promise.all([
     prisma.pricingPlan.create({
       data: {
         name: '경형', baseHourlyKrw: 4000, weekendHourlyKrw: 5000, perKmKrw: 180,
@@ -132,6 +145,10 @@ export async function runSeed(prisma: PrismaClient) {
       },
     }),
   ]);
+  const planLight = seeded(plans, 'name', '경형');
+  const planCompact = seeded(plans, 'name', '준중형');
+  const planEv = seeded(plans, 'name', '전기차');
+  const planSuv = seeded(plans, 'name', 'SUV');
 
   // ── 존 (전국) — 실데이터(data/zones.json) 우선, region은 도로망 그래프 키 ──
   const zoneDefs = loadZoneDefs();
@@ -186,7 +203,6 @@ export async function runSeed(prisma: PrismaClient) {
   // 법인 계정은 Role(전역 역할) + corpGrade(법인 내 등급)를 함께 갖는다.
   // 등급→권한 판정은 packages/shared 의 CORP_PERMISSIONS 가 단일 소스.
   const passwordHash = await bcrypt.hash('demo1234', 10);
-  // 4번째(운영 어드민)는 뒤에서 참조하지 않아 비워 둔다
   // 이메일로 꺼내 쓴다 — 위치 기반 구조 분해는 계정이 하나 끼어들 때 조용히 어긋난다
   const accounts = await Promise.all([
     prisma.user.create({
@@ -213,14 +229,9 @@ export async function runSeed(prisma: PrismaClient) {
       data: { email: 'handler@demo.mocar.kr', name: '한기사', role: Role.HANDLER, passwordHash },
     }),
   ]);
-  const byEmail = (email: string) => {
-    const found = accounts.find((a) => a.email === email);
-    if (!found) throw new Error(`시드 계정 누락: ${email}`);
-    return found;
-  };
-  const user = byEmail('user@demo.mocar.kr');
-  const corpMember = byEmail('member@demo.mocar.kr');
-  const handler = byEmail('handler@demo.mocar.kr');
+  const user = seeded(accounts, 'email', 'user@demo.mocar.kr');
+  const corpMember = seeded(accounts, 'email', 'member@demo.mocar.kr');
+  const handler = seeded(accounts, 'email', 'handler@demo.mocar.kr');
 
   // ── 법인 전용존 + 전용 차량 (= 법인이 MOCAR에서 리스한 차량 — 아래 리스 계약과 짝) ──
   const corpZone = await prisma.zone.create({
@@ -234,7 +245,7 @@ export async function runSeed(prisma: PrismaClient) {
       corporationId: corp.id,
     },
   });
-  const [dedicatedEv, dedicatedVan] = await Promise.all([
+  const dedicatedVehicles = await Promise.all([
     prisma.vehicle.create({
       data: {
         modelName: '아이오닉 5', plateNo: '00허 0001', fuel: FuelType.EV, seats: 5,
@@ -248,6 +259,8 @@ export async function runSeed(prisma: PrismaClient) {
       },
     }),
   ]);
+  const dedicatedEv = seeded(dedicatedVehicles, 'plateNo', '00허 0001');
+  const dedicatedVan = seeded(dedicatedVehicles, 'plateNo', '00허 0002');
 
   // ── 리스 계약 (법인 ↔ MOCAR) ──
   // 전용 차량 = MOCAR가 법인에 리스한 차량. 차량 1대당 진행 중(ACTIVE) 계약 1건이 원칙이고,
@@ -518,15 +531,27 @@ export async function runSeed(prisma: PrismaClient) {
     taskCount++;
 
     // ③ 재배치 — 운영자가 낸 존 간 이동 작업 (공개, 오늘 중 처리)
-    const repositionFrom = taskZones[2] ?? taskZones[0];
-    const repositionTo = taskZones[3] ?? taskZones[1];
-    if (repositionFrom.id !== repositionTo.id) {
+    // 인덱스로 존을 고르면(taskZones[2] ?? taskZones[0]) 존이 모자랄 때 앞 작업의 존으로
+    // 되돌아오고, 그 존의 첫 차량 = 이미 작업이 걸린 차량이 된다 — 한 대에 살아 있는 작업
+    // 두 건이 생긴다. 그래서 "아직 작업이 없는 차량"을 기준으로 고른다.
+    const busy = new Set([deliveryVehicle.id, retrieveVehicle.id]);
+    const usedZones = new Set([deliveryZone.id, retrieveZone.id]);
+    // 앞 작업이 쓰지 않은 존을 먼저 본다 (존이 넉넉하면 예전과 같은 존을 고른다)
+    const candidateZones = [
+      ...taskZones.filter((z) => !usedZones.has(z.id)),
+      ...taskZones.filter((z) => usedZones.has(z.id)),
+    ];
+    const freeVehicleIn = (zoneId: string) =>
+      vehicles.find((v) => v.zoneId === zoneId && !busy.has(v.id));
+    const repositionVehicle = candidateZones.map((z) => freeVehicleIn(z.id)).find((v) => v);
+    const repositionTo = candidateZones.find((z) => z.id !== repositionVehicle?.zoneId);
+    if (repositionVehicle && repositionTo) {
       await prisma.handlerTask.create({
         data: {
           type: HandlerTaskType.REPOSITION,
           status: HandlerTaskStatus.PENDING,
-          vehicleId: vehicleInZone(repositionFrom.id).id,
-          fromZoneId: repositionFrom.id,
+          vehicleId: repositionVehicle.id,
+          fromZoneId: repositionVehicle.zoneId,
           toZoneId: repositionTo.id,
           dueAt: slot(8 * 60),
         },

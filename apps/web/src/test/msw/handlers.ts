@@ -58,6 +58,7 @@ import {
   userCorpApprover,
   userCorpMember,
   userCorpViewer,
+  userHandler,
   userOpsAdmin,
   userPersonal,
   vehicleAvante,
@@ -86,6 +87,7 @@ const reservationsById = Object.fromEntries(
   ]),
 );
 
+/** 로그인 목이 아는 계정 — 로그인 화면의 데모 계정 버튼과 같은 목록이어야 한다 */
 const DEMO_ACCOUNTS = [
   userPersonal,
   userCorpViewer,
@@ -93,6 +95,7 @@ const DEMO_ACCOUNTS = [
   userCorpApprover,
   userCorpAdmin,
   userOpsAdmin,
+  userHandler,
 ];
 
 /** 작업 상태 전이 목 — 실제 API처럼 갱신된 작업 1건을 돌려준다 */

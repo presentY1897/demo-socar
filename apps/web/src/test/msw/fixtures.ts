@@ -221,7 +221,7 @@ export const userPersonal = make(authUserSchema, {
 
 export const userCorpAdmin = make(authUserSchema, {
   id: 'user-corp-admin',
-  email: 'corpadmin@demo.mocar.kr',
+  email: 'admin@demo.mocar.kr',
   name: '박배차',
   role: 'CORP_ADMIN',
   corporationId: 'corp-1',
