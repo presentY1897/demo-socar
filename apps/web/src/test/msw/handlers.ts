@@ -23,6 +23,7 @@ import {
   handlerCandidateSchema,
   metricsDailyRowSchema,
   metricsSummarySchema,
+  reportOptionsSchema,
   pricingPlanSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
@@ -71,6 +72,8 @@ import {
   opsTasks,
   metricsDaily,
   metricsSummary,
+  makeReport,
+  reportOptions,
   opsUserDetail,
   opsUsersRisk,
   opsZonePaid,
@@ -519,6 +522,14 @@ export const handlers = [
 
   http.get(url('/metrics/daily'), () =>
     HttpResponse.json(metricsDaily.map((d) => metricsDailyRowSchema.parse(d))),
+  ),
+
+  // ── 리포트 빌더 (M4-2) ──────────────────────────
+  // 필터 조합이 곧 응답이라 요청 쿼리를 읽어 만든다 (fixtures.makeReport)
+  http.get(url('/ops/reports/options'), () => json(reportOptionsSchema, reportOptions)),
+
+  http.get(url('/ops/reports'), ({ request }) =>
+    HttpResponse.json(makeReport(new URL(request.url).searchParams)),
   ),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────

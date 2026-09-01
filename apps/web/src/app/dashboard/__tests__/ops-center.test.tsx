@@ -53,7 +53,7 @@ const renderOps = (searchParams = '') => {
 const statCard = (label: string) => screen.getByText(label).parentElement as HTMLElement;
 
 describe('운영 센터 — 탭 셸', () => {
-  it('shared 탭 키 6개를 라벨 그대로 렌더하고 운영 홈으로 시작한다', async () => {
+  it('shared 탭 키를 순서·라벨 그대로 렌더하고 운영 홈으로 시작한다', async () => {
     renderOps();
 
     const tabs = screen.getAllByRole('tab');

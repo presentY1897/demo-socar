@@ -14,6 +14,10 @@ import {
   handlerCandidateSchema,
   metricsDailyRowSchema,
   metricsSummarySchema,
+  REPORT_METRIC_META,
+  reportOptionsSchema,
+  reportResponseSchema,
+  shiftDate,
   liveVehicleSchema,
   liveVehiclesEventSchema,
   opsFleetVehicleSchema,
@@ -53,6 +57,9 @@ import {
   type OpsZoneRes,
   type PricingPlanRes,
   type RentalUsageRes,
+  type ReportGroupBy,
+  type ReportMetric,
+  type ReportResponseRes,
   type ReservationRes,
   type VehicleManualRes,
   type ZoneDetailRes,
@@ -1204,3 +1211,52 @@ export const opsAccountingSummary = make(opsAccountingSummarySchema, {
   marginPct: 27.7,
   counts: { vehicleCount: 73, leasedVehicleCount: 25, paidZoneCount: 20, activeLeaseCount: 2 },
 });
+
+// ─────────────────────── 리포트 빌더 (/ops/reports · M4-2·3) ───────────────────────
+
+/** `GET /ops/reports/options` — 필터 폼의 존·차종 선택지 */
+export const reportOptions = make(reportOptionsSchema, {
+  zones: [
+    { id: 'zone-gangnam', name: '강남 1호점' },
+    { id: 'zone-seongsu', name: '성수 2호점' },
+  ],
+  models: ['아반떼', '아이오닉 5'],
+});
+
+/**
+ * `GET /ops/reports` — 요청한 지표·축을 그대로 반영한 응답을 만든다.
+ *
+ * 리포트는 필터 조합이 곧 응답이라 고정 픽스처 하나로는 "필터를 바꾸면 화면이 따라오는가"를
+ * 검증할 수 없다. 값은 축 순서로 정해지는 결정적 숫자라 테스트가 그대로 기대값에 쓴다.
+ */
+export function makeReport(params: URLSearchParams): ReportResponseRes {
+  const metric = (params.get('metric') ?? 'revenue') as ReportMetric;
+  const groupBy = (params.get('groupBy') ?? 'day') as ReportGroupBy;
+  const from = params.get('from') || '2026-08-01';
+  const to = params.get('to') || '2026-08-03';
+  const unit = REPORT_METRIC_META[metric].unit;
+  const scale = unit === 'krw' ? 10_000 : 10;
+
+  const rows =
+    groupBy === 'day'
+      ? [0, 1, 2].map((i) => ({ key: shiftDate(from, i), label: shiftDate(from, i) }))
+      : groupBy === 'zone'
+        ? reportOptions.zones.map((z) => ({ key: z.id, label: z.name }))
+        : reportOptions.models.map((m) => ({ key: m, label: m }));
+
+  const withValues = rows.map((r, i) => ({ ...r, value: (i + 1) * scale }));
+  return make(reportResponseSchema, {
+    meta: {
+      metric,
+      groupBy,
+      unit,
+      range: { from, to },
+      filters: { zoneId: params.get('zoneId') || null, model: params.get('model') || null },
+      total: withValues.reduce((sum, r) => sum + r.value, 0),
+    },
+    rows: withValues,
+  });
+}
+
+/** 기본 응답 (revenue × day) — 표·차트 기대값을 적을 때 쓰는 기준점 */
+export const reportRevenueDaily = makeReport(new URLSearchParams());

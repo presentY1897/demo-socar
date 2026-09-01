@@ -8,11 +8,12 @@ import { OpsCustomersTab } from '@/components/ops/OpsCustomersTab';
 import { OpsDispatchTab } from '@/components/ops/OpsDispatchTab';
 import { OpsFleetTab } from '@/components/ops/OpsFleetTab';
 import { OpsHomeTab } from '@/components/ops/OpsHomeTab';
+import { OpsReportsTab } from '@/components/ops/OpsReportsTab';
 import { OpsZonesTab } from '@/components/ops/OpsZonesTab';
 import { useSession } from '@/lib/session';
 
 /**
- * 운영 센터 — 매출 대시보드였던 `/dashboard`를 운영자가 쓰는 6탭 도구로 바꾼 화면 (M3-4~6).
+ * 운영 센터 — 매출 대시보드였던 `/dashboard`를 운영자가 쓰는 탭 도구로 바꾼 화면 (M3-4~6 · 리포트 탭 M4-3).
  *
  * 탭 목록·라벨은 shared(`opsTabSchema` · `OPS_TAB_LABEL`)가 단일 소스다. 경고 피드가
  * "이 항목은 어느 탭 소관"인지를 서버 응답(`alert.tab`)으로 실어 오기 때문에, 화면이 탭을
@@ -79,6 +80,7 @@ function OpsCenter() {
         {tab === 'zones' && <OpsZonesTab targetId={targetId} />}
         {tab === 'customers' && <OpsCustomersTab targetId={targetId} />}
         {tab === 'accounting' && <OpsAccountingTab />}
+        {tab === 'reports' && <OpsReportsTab />}
       </div>
     </div>
   );

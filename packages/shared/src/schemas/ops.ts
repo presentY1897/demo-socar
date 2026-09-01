@@ -18,6 +18,7 @@ export const opsTabSchema = z.enum([
   'zones',
   'customers',
   'accounting',
+  'reports',
 ]);
 export type OpsTab = z.infer<typeof opsTabSchema>;
 
@@ -28,6 +29,7 @@ export const OPS_TAB_LABEL: Record<OpsTab, string> = {
   zones: '존/계약',
   customers: '고객',
   accounting: '회계',
+  reports: '리포트',
 };
 
 // ─────────────────────────── 경고 ───────────────────────────
