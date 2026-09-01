@@ -1,10 +1,10 @@
 /**
  * 데모 시드 데이터.
  * - 전국 주요 도시의 존/차량 (region 키는 도로망 그래프 파일과 매칭)
- * - 데모 계정 4종 (README 참고)
+ * - 데모 계정 5종 (README 참고) — 법인 계정은 등급(corpGrade)까지 부여
  * - 지표/배차 리스크 계산용 과거 이용 이력 (결정적 난수로 재현 가능)
  */
-import { PrismaClient, Role, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason } from '@prisma/client';
+import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStatus, RentalStatus, PaymentKind, PaymentStatus, CreditReason, LeaseStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -16,8 +16,9 @@ import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
  *   v1: 초기 시드 (수동 존 10곳)
  *   v2: 실데이터 존 30곳 (전국주차장정보표준데이터 + OSM)
  *   v3: 이용 플로우 도메인 추가 (체크인/아웃·스마트키·문의·사고) — 재시드 시 신규 테이블도 함께 초기화
+ *   v4: 법인 등급(corpGrade) 부여 + 리스 계약(LeaseContract) + viewer 계정
  */
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 interface ZoneDef {
   name: string;
@@ -91,6 +92,7 @@ export async function runSeed(prisma: PrismaClient) {
     prisma.reservation.deleteMany(),
     prisma.coupon.deleteMany(),
     prisma.creditLedger.deleteMany(),
+    prisma.leaseContract.deleteMany(),
     prisma.vehicle.deleteMany(),
     prisma.zone.deleteMany(),
     prisma.pricingPlan.deleteMany(),
@@ -176,23 +178,28 @@ export async function runSeed(prisma: PrismaClient) {
     },
   });
 
+  // 법인 계정은 Role(전역 역할) + corpGrade(법인 내 등급)를 함께 갖는다.
+  // 등급→권한 판정은 packages/shared 의 CORP_PERMISSIONS 가 단일 소스.
   const passwordHash = await bcrypt.hash('demo1234', 10);
   const [user, corpMember, corpAdmin] = await Promise.all([
     prisma.user.create({
       data: { email: 'user@demo.mocar.kr', name: '김소카', role: Role.USER, passwordHash },
     }),
     prisma.user.create({
-      data: { email: 'member@demo.mocar.kr', name: '이직원', role: Role.CORP_MEMBER, corporationId: corp.id, passwordHash },
+      data: { email: 'member@demo.mocar.kr', name: '이직원', role: Role.CORP_MEMBER, corporationId: corp.id, corpGrade: CorpGrade.REQUESTER, passwordHash },
     }),
     prisma.user.create({
-      data: { email: 'admin@demo.mocar.kr', name: '박배차', role: Role.CORP_ADMIN, corporationId: corp.id, passwordHash },
+      data: { email: 'admin@demo.mocar.kr', name: '박배차', role: Role.CORP_ADMIN, corporationId: corp.id, corpGrade: CorpGrade.MANAGER, passwordHash },
+    }),
+    prisma.user.create({
+      data: { email: 'viewer@demo.mocar.kr', name: '한조회', role: Role.CORP_MEMBER, corporationId: corp.id, corpGrade: CorpGrade.VIEWER, passwordHash },
     }),
     prisma.user.create({
       data: { email: 'ops@demo.mocar.kr', name: '최운영', role: Role.OPS_ADMIN, passwordHash },
     }),
   ]);
 
-  // ── 법인 전용존 + 전용 차량 (FMS: 법인 소유/장기렌트 차량을 플랫폼 기술로 관리) ──
+  // ── 법인 전용존 + 전용 차량 (= 법인이 MOCAR에서 리스한 차량 — 아래 리스 계약과 짝) ──
   const corpZone = await prisma.zone.create({
     data: {
       name: '데모컴퍼니 사옥 주차장',
@@ -218,6 +225,48 @@ export async function runSeed(prisma: PrismaClient) {
       },
     }),
   ]);
+
+  // ── 리스 계약 (법인 ↔ MOCAR) ──
+  // 전용 차량 = MOCAR가 법인에 리스한 차량. 차량 1대당 진행 중(ACTIVE) 계약 1건이 원칙이고,
+  // 종료된 과거 계약은 이력으로 남긴다. 카니발은 만기 임박(D-24) 케이스.
+  const monthsFromNow = (months: number, days = 0) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + months);
+    d.setDate(d.getDate() + days);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  await prisma.leaseContract.createMany({
+    data: [
+      {
+        corporationId: corp.id,
+        vehicleId: dedicatedEv.id,
+        monthlyFeeKrw: 690000,
+        startAt: monthsFromNow(-6),
+        endAt: monthsFromNow(6),
+        status: LeaseStatus.ACTIVE,
+      },
+      {
+        // 만기 임박 — /biz/fleet 의 D-day 강조 케이스
+        corporationId: corp.id,
+        vehicleId: dedicatedVan.id,
+        monthlyFeeKrw: 890000,
+        startAt: monthsFromNow(-11),
+        endAt: monthsFromNow(0, 24),
+        status: LeaseStatus.ACTIVE,
+      },
+      {
+        // 종료된 이전 계약 (계약 이력)
+        corporationId: corp.id,
+        vehicleId: dedicatedEv.id,
+        monthlyFeeKrw: 650000,
+        startAt: monthsFromNow(-30),
+        endAt: monthsFromNow(-6),
+        endedAt: monthsFromNow(-6),
+        status: LeaseStatus.ENDED,
+      },
+    ],
+  });
 
   // 전용 차량 운행 이력 (운행일지 — 과금 없음). 카니발은 지연 반납이 잦은 차로 만든다
   for (let day = 20; day >= 1; day -= 2) {
@@ -351,13 +400,15 @@ export async function runSeed(prisma: PrismaClient) {
     console.warn(`⚠️ 매뉴얼 콘텐츠 없는 차종: ${missingManuals.join(', ')} (src/vehicles/vehicle-manual.ts)`);
   }
 
+  const leaseCount = await prisma.leaseContract.count();
   console.log(
-    `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}`,
+    `seeded: v${SEED_VERSION}, zones=${zoneDefs.length}, vehicles=${vehicles.length}, history=${histCount}, manuals=${MANUAL_MODEL_NAMES.length}, leases=${leaseCount}`,
   );
   console.log('demo accounts (pw: demo1234):');
   console.log('  user@demo.mocar.kr   개인 이용자');
-  console.log('  member@demo.mocar.kr 법인 임직원');
-  console.log('  admin@demo.mocar.kr  법인 배차 담당');
+  console.log('  viewer@demo.mocar.kr 법인 임직원 (등급 VIEWER — 조회만)');
+  console.log('  member@demo.mocar.kr 법인 임직원 (등급 REQUESTER — 배차 요청)');
+  console.log('  admin@demo.mocar.kr  법인 배차 담당 (등급 MANAGER — 멤버/플릿 관리)');
   console.log('  ops@demo.mocar.kr    운영 어드민');
 }
 

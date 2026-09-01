@@ -26,14 +26,24 @@ enum Role {
   OPS_ADMIN // 쏘카 운영 어드민
 }
 
+// 법인 내 등급 (MOCAR 비즈니스) — Role은 서비스 전역 역할, 등급은 법인 안에서의 권한 세분화.
+// 등급→권한 매핑은 packages/shared 의 CORP_PERMISSIONS 가 단일 소스다.
+enum CorpGrade {
+  VIEWER // 현황 조회만
+  REQUESTER // + 배차 요청 생성
+  APPROVER // + 승인/반려 · 타임라인 보드
+  MANAGER // + 멤버 등급 · 플릿/리스 · 법인 설정
+}
+
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
+  id            String     @id @default(cuid())
+  email         String     @unique
   passwordHash  String
   name          String
-  role          Role     @default(USER)
+  role          Role       @default(USER)
   corporationId String?
-  createdAt     DateTime @default(now())
+  corpGrade     CorpGrade? // 법인 소속만 — 미소속(개인/운영)은 null
+  createdAt     DateTime   @default(now())
 
   corporation      Corporation?      @relation(fields: [corporationId], references: [id])
   reservations     Reservation[]
@@ -42,6 +52,7 @@ model User {
   dispatchRequests DispatchRequest[] @relation("requester")
   dispatchDecided  DispatchRequest[] @relation("decider")
   inquiries        Inquiry[]
+  leaseRequests    LeaseContract[]   @relation("leaseRequester")
 }
 
 model Corporation {
@@ -54,7 +65,8 @@ model Corporation {
   members          User[]
   dispatchRequests DispatchRequest[]
   zones            Zone[] // 기업 전용존 (사옥 주차장 등)
-  vehicles         Vehicle[] // 법인 소유/장기렌트 차량 (FMS 모델)
+  vehicles         Vehicle[] // 법인 전용 차량 = MOCAR가 이 법인에 리스한 차량
+  leaseContracts   LeaseContract[]
 }
 
 // ─────────────────────────── 존 / 차량 / 요금제 ───────────────────────────
@@ -108,7 +120,7 @@ model Vehicle {
   imageUrl      String?
   zoneId        String
   planId        String
-  corporationId String? // 값이 있으면 법인 소유/장기렌트 차량 (FMS) — 이용 과금 없음
+  corporationId String? // 값이 있으면 법인 전용 차량 (= 리스 계약 차량) — 이용 과금 없음
 
   // 가상 스마트키(M1-4) 조작 결과를 담는 임시 상태 필드.
   // ⚠️ M3-1에서 VehicleTelemetry(연료·주행거리·좌표 포함)로 통합 예정 — 그때 이 두 필드는 제거된다.
@@ -122,6 +134,7 @@ model Vehicle {
   dispatchCandidates DispatchCandidate[]
   controlLogs        VehicleControlLog[]
   inquiries          Inquiry[]
+  leaseContracts     LeaseContract[]
 }
 
 // ─────────────────────────── 예약 / 대여 ───────────────────────────
@@ -449,4 +462,45 @@ model DispatchCandidate {
   vehicle Vehicle         @relation(fields: [vehicleId], references: [id])
 
   @@unique([requestId, vehicleId])
+}
+
+// ─────────────────────── 리스 계약 (MOCAR 비즈니스) ───────────────────────
+
+enum LeaseStatus {
+  ACTIVE // 계약 중
+  EXTENSION_REQUESTED // 법인이 연장 요청, 운영 어드민 처리 대기
+  TERMINATION_REQUESTED // 법인이 해지 요청, 운영 어드민 처리 대기
+  ENDED // 만기·해지로 종료
+}
+
+/// 법인 ↔ MOCAR 리스 계약. 법인 전용 차량 1대 = 리스 계약 1건(진행 중 기준).
+///
+/// M3 `VehicleFinance`와의 구분:
+///   - VehicleFinance = MOCAR 원가 관점 (차량 구매·리스 매입가, 보험료 등 우리가 쓴 돈)
+///   - LeaseContract  = 법인 ↔ MOCAR 계약 (법인 관점의 월 비용, MOCAR 관점의 매출)
+/// 즉 M3 회계에서 이 월 리스료는 리스 매출로 합산할 수 있다.
+model LeaseContract {
+  id            String      @id @default(cuid())
+  corporationId String
+  vehicleId     String
+  monthlyFeeKrw Int // 월 리스료 (법인 청구 기준)
+  startAt       DateTime
+  endAt         DateTime // 계약 만기 — 만기 임박(D-day)은 이 값으로 계산
+  status        LeaseStatus @default(ACTIVE)
+
+  // 연장/해지 요청 워크플로 (법인 요청 → 운영 어드민 승인/반려)
+  requestedById  String? // 요청한 법인 멤버
+  requestedAt    DateTime?
+  requestedEndAt DateTime? // 연장 요청 시 희망 만기
+  requestNote    String?
+  endedAt        DateTime? // 해지·만기로 실제 종료된 시각
+
+  createdAt DateTime @default(now())
+
+  corporation Corporation @relation(fields: [corporationId], references: [id])
+  vehicle     Vehicle     @relation(fields: [vehicleId], references: [id])
+  requestedBy User?       @relation("leaseRequester", fields: [requestedById], references: [id])
+
+  @@index([corporationId, status])
+  @@index([vehicleId, status])
 }

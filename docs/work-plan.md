@@ -99,7 +99,7 @@
 
 | 상태 | ID | 작업 | 의존 |
 |---|---|---|---|
-| ☐ | [M5-1](task/m5-1-corp-grade-domain.md) | 법인 등급 + 리스 도메인 — corpGrade·권한 상수·`LeaseContract`(전용 차량 백필)·viewer 계정 | — |
+| ☑ | [M5-1](task/m5-1-corp-grade-domain.md) | 법인 등급 + 리스 도메인 — corpGrade·권한 상수·`LeaseContract`(전용 차량 백필)·viewer 계정 | — |
 | ☐ | [M5-2](task/m5-2-biz-separation.md) | 비즈 서비스 분리 — `/biz` 라우트 그룹+BizShell, API biz 컨텍스트 재배치, 추출 경계 정리 | M5-1 |
 | ☐ | [M5-3](task/m5-3-permission-guards.md) | 권한 가드 + 등급 관리 API — biz dispatch 적용·/biz/members | M5-2 |
 | ☐ | [M5-4](task/m5-4-grade-ui.md) | 등급 관리 UI + 등급별 화면 분기 — /biz/members·버튼/탭 노출 제어 | M5-3 |
