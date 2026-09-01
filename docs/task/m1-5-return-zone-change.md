@@ -1,7 +1,7 @@
 # M1-5 — 예약 변경 시 반납존 변경
 
 - 마일스톤: M1 (이용 플로우 완성) · 규모 M
-- 상태: ☐ 대기
+- 상태: ☑ 완료
 - 의존: M1-1
 
 ## 목적
@@ -10,21 +10,27 @@
 
 ## 작업 내용
 
-- [ ] **shared** — `modifyReservationSchema`에 `returnZoneId?: string | null` 추가 (null = 왕복 전환)
-- [ ] **API** — `PATCH /reservations/:id` 확장 (`apps/api/src/reservations/`):
+- [x] **shared** — `modifyReservationSchema`에 `returnZoneId?: string | null` 추가 (null = 왕복 전환)
+- [x] **API** — `PATCH /reservations/:id` 확장 (`apps/api/src/reservations/`):
   - 편도 수수료 재견적(하버사인 × 500원, 최소 5,000원 — 기존 엔진 재사용) → 총액 차액 계산
   - 차액 양수: 추가 결제(모의 PG, 멱등성 키) / 음수: 크레딧 환급(REFUND ledger) — 시간 변경과 동일 플로우 공유
   - **위치 체인 재검증**: 반납존이 바뀌면 이 차량의 이후 예약들 가용성이 달라짐 → 이후 CONFIRMED 예약과 충돌 시 409 (ADR-005 위치 체인 함수 재사용)
   - 제약: 이용 전(CONFIRMED)만 · 부름 예약은 반납존 변경 불가(편도와 배타 유지)
-- [ ] **웹** — 예약 상세 "시간 변경" UI에 반납존 선택(기존 `GET /zones/:id/return-zones` 재사용) + 수수료 차액 미리보기
+- [x] **웹** — 예약 변경 패널(`components/ModifyReservationPanel.tsx`)에 반납존 선택(기존 `GET /zones/:id/return-zones` 재사용) + 수수료 차액 미리보기
 
 ## 산출물
 
-- reservations service `modify` 확장 · shared 스키마 · 예약 상세 변경 UI
+- reservations service `modify` 확장 (`resolveReturnZoneChange` · `assertLocationChainIntact`) · shared 스키마
+- `apps/web/src/components/ModifyReservationPanel.tsx`(신규) — 시각 + 반납존 + 차액 미리보기
+
+> ⚠️ 남은 연결: 예약 상세(`apps/web/src/app/reservations/[id]/page.tsx`)의 인라인 "시간 변경" 블록을
+> `<ModifyReservationPanel reservation={data} onDone={...} />`로 교체하는 일만 남았다.
+> 같은 파일을 M1-3(체크인/아웃 단계형 UI)이 재작성 중이라 충돌을 피해 보류했다.
 
 ## 완료 기준
 
 - 통합 테스트 3건: ① 반납존 변경으로 수수료 증가 → 추가 결제 ② 왕복 전환 → 수수료 환급 ③ 이후 예약 체인 충돌 → 409
+  → `apps/api/test/return-zone-change.int-spec.ts` 10건 (위 3건 + 400/403/404/체인 해소/기존 유지/왕복 정리)
 
 ## 테스트
 

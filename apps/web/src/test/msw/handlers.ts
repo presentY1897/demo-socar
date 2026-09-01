@@ -20,6 +20,7 @@ import {
   type VehicleControlActionValue,
 } from '@socar/shared';
 import {
+  allZones,
   conditionCheckIn,
   conditionCheckOut,
   couponWelcome,
@@ -29,7 +30,9 @@ import {
   incidentResultFull,
   inquiryAnswered,
   inquiryOpen,
+  reservationDelivery,
   reservationInUse,
+  reservationOneway,
   smartKeyLocked,
   usageEmpty,
   userCorpAdmin,
@@ -53,6 +56,10 @@ const vehiclesById = Object.fromEntries(
   [vehicleAvante, vehicleIoniq].map((v) => [v.id, v]),
 );
 
+const reservationsById = Object.fromEntries(
+  [reservationConfirmed, reservationOneway, reservationDelivery].map((r) => [r.id, r]),
+);
+
 const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
 
 const reservationsById = Object.fromEntries(
@@ -69,13 +76,15 @@ export const handlers = [
     HttpResponse.json(zoneMarkers.map((z) => zoneMarkerSchema.parse(z))),
   ),
 
-  http.get(url('/zones/:id/return-zones'), ({ params }) =>
-    HttpResponse.json(
-      zoneMarkers
-        .filter((z) => z.id !== params.id)
+  // 편도 반납 후보 — 실제 API와 같이 같은 region의 다른 존만 돌려준다
+  http.get(url('/zones/:id/return-zones'), ({ params }) => {
+    const from = allZones.find((z) => z.id === params.id);
+    return HttpResponse.json(
+      allZones
+        .filter((z) => z.id !== params.id && (!from || z.region === from.region))
         .map((z) => zoneMarkerSchema.omit({ vehicleCount: true }).parse(z)),
-    ),
-  ),
+    );
+  }),
 
   http.get(url('/zones/:id'), ({ params }) => {
     const detail = zoneDetails[String(params.id)];
@@ -132,6 +141,21 @@ export const handlers = [
     const resv = reservationsById[String(params.id)];
     if (!resv) return HttpResponse.json({ message: '예약을 찾을 수 없습니다' }, { status: 404 });
     return json(reservationSchema, resv);
+  }),
+
+  // 예약 변경 — 서버가 재견적한 예약을 그대로 돌려준다 (금액 검증은 API 통합 테스트 몫)
+  http.patch(url('/reservations/:id'), async ({ params, request }) => {
+    const resv = reservationsById[String(params.id)];
+    if (!resv) return HttpResponse.json({ message: '예약을 찾을 수 없습니다' }, { status: 404 });
+    const body = (await request.json()) as { startAt: string; endAt: string; returnZoneId: string | null };
+    const returnZone = allZones.find((z) => z.id === body.returnZoneId) ?? null;
+    return json(reservationSchema, {
+      ...resv,
+      startAt: body.startAt,
+      endAt: body.endAt,
+      returnZoneId: returnZone?.id ?? null,
+      returnZone,
+    });
   }),
 
   http.post(url('/reservations'), () => json(reservationSchema, reservationConfirmed, 201)),

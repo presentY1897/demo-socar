@@ -76,11 +76,13 @@ export const quoteRequestSchema = z
   });
 export type QuoteRequestDto = z.infer<typeof quoteRequestSchema>;
 
-/** 이용 전 예약 시간 변경 */
+/** 이용 전 예약 변경 — 시각과 반납 존 */
 export const modifyReservationSchema = z
   .object({
     startAt: z.string().datetime({ offset: true }),
     endAt: z.string().datetime({ offset: true }),
+    /** 반납 존 변경: 생략 = 기존 유지 · null = 왕복 전환 · 존 id = 그 존으로 편도 */
+    returnZoneId: z.string().min(1).nullable().optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .refine((v) => new Date(v.startAt) < new Date(v.endAt), {

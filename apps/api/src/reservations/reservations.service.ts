@@ -25,7 +25,7 @@ import {
 } from '@socar/shared';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { effectiveZoneIdAt } from '../common/vehicle-location';
+import { effectiveZoneIdAt, type ChainReservation } from '../common/vehicle-location';
 import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/travel-time';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 
@@ -274,17 +274,43 @@ export class ReservationsService {
         }
         if (resv.deliveryLabel) {
           // 탁송 일정 재검증이 얽히므로 데모에서는 미지원 — 취소 후 재예약 안내
-          throw new BadRequestException('부름 예약은 시간 변경 대신 취소 후 다시 예약해 주세요');
+          throw new BadRequestException(
+            '부름 예약은 시간·반납 존 변경 대신 취소 후 다시 예약해 주세요',
+          );
         }
 
         await this.assertNoOverlap(tx, resv.vehicleId, startAt, endAt, id);
+
+        // 이 차량의 나머지 미완료 예약 = 편도 위치 체인의 나머지 항목 (ADR-005)
+        const others = await tx.reservation.findMany({
+          where: {
+            vehicleId: resv.vehicleId,
+            id: { not: id },
+            status: { in: ['CONFIRMED', 'IN_USE'] },
+          },
+          select: { startAt: true, endAt: true, returnZoneId: true },
+        });
+
+        const { returnZoneId, onewayFeeKrw } = await this.resolveReturnZoneChange(
+          tx,
+          resv,
+          others,
+          startAt,
+          dto,
+        );
+        this.assertLocationChainIntact(
+          resv.vehicle.zoneId,
+          others,
+          { endAt: resv.endAt, returnZoneId: resv.returnZoneId },
+          { endAt, returnZoneId },
+        );
 
         const breakdown = quote({
           plan: resv.vehicle.plan,
           startAt,
           endAt,
           insurance: resv.insurance,
-          onewayFeeKrw: resv.onewayFeeKrw, // 편도 반납 존 변경은 미지원
+          onewayFeeKrw,
           couponDiscountKrw: resv.coupon?.discountKrw ?? 0,
           creditBalanceKrw: resv.creditUsedKrw, // 기존 사용분 한도 내 유지
           useCredit: resv.creditUsedKrw > 0,
@@ -332,8 +358,10 @@ export class ReservationsService {
           data: {
             startAt,
             endAt,
+            returnZoneId,
             rentalFeeKrw: breakdown.rentalFeeKrw,
             insuranceFeeKrw: breakdown.insuranceFeeKrw,
+            onewayFeeKrw: breakdown.onewayFeeKrw,
             discountKrw: breakdown.discountKrw,
             creditUsedKrw: breakdown.creditUsedKrw,
             totalUpfrontKrw: breakdown.totalUpfrontKrw,
@@ -411,6 +439,74 @@ export class ReservationsService {
         data: { status: 'CANCELED', canceledAt: new Date() },
       });
     });
+  }
+
+  /**
+   * 예약 변경의 반납 존 재검증 + 편도 수수료 재견적.
+   *
+   * 출발 존은 "새 시작 시각의 유효 위치"라서(ADR-005) 반납 존을 그대로 둬도 시간만 바뀌면
+   * 수수료가 달라질 수 있다. 그래서 편도 예약은 매번 다시 계산한다.
+   */
+  private async resolveReturnZoneChange(
+    tx: Prisma.TransactionClient,
+    resv: {
+      returnZoneId: string | null;
+      vehicle: { zoneId: string; corporationId: string | null };
+    },
+    others: ChainReservation[],
+    startAt: Date,
+    dto: ModifyReservationDto,
+  ): Promise<{ returnZoneId: string | null; onewayFeeKrw: number }> {
+    // 생략 = 기존 반납 존 유지, null = 왕복 전환
+    const requested = dto.returnZoneId === undefined ? resv.returnZoneId : dto.returnZoneId;
+    if (!requested) return { returnZoneId: null, onewayFeeKrw: 0 };
+
+    if (resv.vehicle.corporationId !== null) {
+      throw new BadRequestException('법인 전용 차량은 존 왕복만 가능합니다');
+    }
+
+    const startZoneId = effectiveZoneIdAt(resv.vehicle.zoneId, others, startAt);
+    // 출발 존과 같은 곳을 고르면 왕복이다 (create/quote와 같은 판정)
+    if (requested === startZoneId) return { returnZoneId: null, onewayFeeKrw: 0 };
+
+    const [startZone, returnZone] = await Promise.all([
+      tx.zone.findUnique({ where: { id: startZoneId } }),
+      tx.zone.findUnique({ where: { id: requested } }),
+    ]);
+    if (!returnZone || returnZone.corporationId !== null) {
+      throw new NotFoundException('반납 존을 찾을 수 없습니다');
+    }
+    if (!startZone || returnZone.region !== startZone.region) {
+      throw new BadRequestException('같은 지역의 존으로만 편도 반납이 가능합니다');
+    }
+    return {
+      returnZoneId: returnZone.id,
+      onewayFeeKrw: onewayFee(haversineMeters(startZone, returnZone)),
+    };
+  }
+
+  /**
+   * 반납 존이나 반납 시각이 바뀌면 이 차량의 "이후 예약이 시작하는 존"이 달라질 수 있다.
+   * 그 예약은 원래 존에서 픽업하기로 결제까지 끝난 상태라 뒤늦게 차를 옮길 수 없다 —
+   * 변경 전후로 다른 예약의 출발 존이 하나라도 달라지면 거부한다 (ADR-005).
+   */
+  private assertLocationChainIntact(
+    baseZoneId: string,
+    others: (ChainReservation & { startAt: Date })[],
+    before: ChainReservation,
+    after: ChainReservation,
+  ) {
+    for (const r of others) {
+      const beforeZoneId = effectiveZoneIdAt(baseZoneId, [...others, before], r.startAt);
+      const afterZoneId = effectiveZoneIdAt(baseZoneId, [...others, after], r.startAt);
+      if (beforeZoneId !== afterZoneId) {
+        throw new ConflictException({
+          message:
+            '이 차량의 다음 예약이 시작하는 존이 달라져 변경할 수 없습니다. 취소 후 다시 예약해 주세요',
+          conflictAt: r.startAt,
+        });
+      }
+    }
   }
 
   /** 겹치는 예약이 있으면 친절한 409 (자기 자신은 제외) */

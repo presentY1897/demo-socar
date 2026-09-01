@@ -75,7 +75,37 @@ export const zoneSeomyeon = make(zoneMarkerSchema, {
   vehicleCount: 0,
 });
 
+/** 강남에서 800m — 편도 수수료가 최소 5,000원에 걸리는 거리 */
+export const zoneYeoksam = make(zoneMarkerSchema, {
+  id: 'zone-yeoksam',
+  name: '역삼역 주차장',
+  region: 'seoul',
+  address: '서울 강남구 테헤란로 지하 156',
+  lat: 37.5006,
+  lng: 127.0365,
+  capacity: 6,
+  corporationId: null,
+  vehicleCount: 1,
+});
+
+/** 강남에서 18km — 최소 수수료를 넘겨 거리 기반 요금(9,000원)이 나오는 존 */
+export const zoneNowon = make(zoneMarkerSchema, {
+  id: 'zone-nowon',
+  name: '노원역 공영주차장',
+  region: 'seoul',
+  address: '서울 노원구 노해로 지하 437',
+  lat: 37.6584,
+  lng: 127.0605,
+  capacity: 5,
+  corporationId: null,
+  vehicleCount: 0,
+});
+
+/** `GET /zones` 가 돌려주는 지도 마커 */
 export const zoneMarkers: ZoneMarkerRes[] = [zoneGangnam, zoneSeomyeon];
+
+/** 편도 반납 후보(`GET /zones/:id/return-zones`)까지 포함한 전체 존 */
+export const allZones: ZoneMarkerRes[] = [zoneGangnam, zoneSeomyeon, zoneYeoksam, zoneNowon];
 
 export const vehicleAvante = make(vehicleSummarySchema, {
   id: 'veh-avante',
@@ -348,4 +378,25 @@ export const incidentResultFull: IncidentResultRes = make(incidentResultSchema, 
     phone: MOCK_INSURER.phone,
     steps: [...MOCK_INSURER.steps],
   },
+});
+
+/** 편도(강남 → 역삼) 예약 — 반납 존 변경/환급 흐름용 */
+export const reservationOneway = make(reservationSchema, {
+  ...reservationConfirmed,
+  id: 'resv-oneway',
+  returnZoneId: zoneYeoksam.id,
+  returnZone: zoneYeoksam,
+  onewayFeeKrw: 5000,
+  totalUpfrontKrw: 27400,
+});
+
+/** 부름(탁송) 수령 예약 — 반납 존 변경이 막히는 케이스 */
+export const reservationDelivery = make(reservationSchema, {
+  ...reservationConfirmed,
+  id: 'resv-delivery',
+  deliveryLat: 37.4995,
+  deliveryLng: 127.0301,
+  deliveryLabel: '회사 정문 앞',
+  deliveryFeeKrw: 6000,
+  totalUpfrontKrw: 28400,
 });
