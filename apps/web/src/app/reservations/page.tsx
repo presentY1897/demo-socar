@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import useSWR from 'swr';
+import type { ReservationStatusValue } from '@socar/shared';
+import { ExportButtons } from '@/components/ExportButtons';
 import { swrFetcher } from '@/lib/api';
 import { fmtDateTime, krw, RESERVATION_STATUS_LABEL } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -10,7 +12,7 @@ interface ReservationRow {
   id: string;
   startAt: string;
   endAt: string;
-  status: string;
+  status: ReservationStatusValue;
   totalUpfrontKrw: number;
   vehicle: { modelName: string; plateNo: string; zone: { name: string } };
   returnZone: { name: string } | null;
@@ -35,7 +37,13 @@ export default function ReservationsPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-4">
-      <h1 className="text-xl font-bold">내 예약</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold">내 예약</h1>
+        {/* 이용 내역을 파일로 (M4-4) — 조회와 같은 엔드포인트라 목록에 보이는 것만 나간다 */}
+        {data && data.length > 0 && (
+          <ExportButtons path="/reservations/mine" label="내예약" />
+        )}
+      </div>
       <div className="mt-4 space-y-3">
         {data?.length === 0 && (
           <p className="py-16 text-center text-sm text-gray-400">

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
-import type { RentalUsageRes } from '@socar/shared';
+import type { RentalUsageRes, ReservationStatusValue } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { fmtDateTime, INSURANCE_META, krw, RESERVATION_STATUS_LABEL } from '@/lib/format';
 import Link from 'next/link';
@@ -19,7 +19,7 @@ interface Detail {
   vehicleId: string;
   startAt: string;
   endAt: string;
-  status: string;
+  status: ReservationStatusValue;
   insurance: 'LIGHT' | 'STANDARD' | 'FULL';
   rentalFeeKrw: number;
   insuranceFeeKrw: number;

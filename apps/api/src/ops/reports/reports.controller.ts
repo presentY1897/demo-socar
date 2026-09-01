@@ -1,7 +1,14 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { reportQuerySchema, type ReportQueryDto } from '@socar/shared';
 import { Roles } from '../../auth/decorators';
 import { ZodValidationPipe } from '../../common/zod-validation.pipe';
+import {
+  buildExportFile,
+  parseExportFormat,
+  respondExport,
+} from '../../common/export/export';
+import { reportExportSpec, reportFilenameParts } from './reports-export';
 import { OpsReportsService } from './reports.service';
 
 /**
@@ -21,8 +28,26 @@ export class OpsReportsController {
     return this.reports.options();
   }
 
+  /** `?format=csv|json`이면 파일로 — 차트가 본 것과 **같은 응답**을 그대로 편다 (M4-4) */
   @Get()
-  build(@Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQueryDto) {
-    return this.reports.build(query);
+  async build(
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQueryDto,
+    @Query('format') rawFormat: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const report = await this.reports.build(query);
+    const format = parseExportFormat(rawFormat);
+    if (!format) return report;
+    return respondExport(
+      res,
+      buildExportFile({
+        format,
+        spec: reportExportSpec(report.meta),
+        rows: report.rows,
+        // JSON은 meta까지 통째로 — 무슨 조건으로 뽑은 값인지가 파일 안에 남는다
+        json: report,
+        parts: reportFilenameParts(report.meta),
+      }),
+    );
   }
 }

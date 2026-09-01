@@ -9,6 +9,7 @@ import {
   type OpsFleetVehicleRes,
   type OpsVehicleState,
 } from '@socar/shared';
+import { ExportButtons } from '@/components/ExportButtons';
 import { swrFetcher } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
 import { FLEET_SORT_LABEL, sortFleet, type FleetSortKey, type SortDir } from '@/lib/ops-fleet';
@@ -30,6 +31,11 @@ export function OpsFleetTab({ targetId }: { targetId?: string | null }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  // 화면이 쓰는 쿼리 한 벌 — 조회와 내보내기가 같은 조건을 본다 (M4-4).
+  // 정렬은 화면에서도 하지만(즉시 반응) 서버도 같은 함수를 쓰므로 파일 순서가 표와 같다.
+  const query = new URLSearchParams({ sort: sortKey, dir: sortDir });
+  if (state) query.set('state', state);
+
   const { data, mutate } = useSWR<OpsFleetVehicleRes[]>(
     state ? `/ops/fleet?state=${state}` : '/ops/fleet',
     swrFetcher,
@@ -47,12 +53,15 @@ export function OpsFleetTab({ targetId }: { targetId?: string | null }) {
       <Panel
         title="차량"
         action={
-          <button
-            onClick={() => setCreating((v) => !v)}
-            className="rounded-lg border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-600"
-          >
-            {creating ? '등록 닫기' : '차량 등록'}
-          </button>
+          <span className="flex items-center gap-1">
+            <ExportButtons path="/ops/fleet" query={query.toString()} label="차량목록" />
+            <button
+              onClick={() => setCreating((v) => !v)}
+              className="rounded-lg border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-600"
+            >
+              {creating ? '등록 닫기' : '차량 등록'}
+            </button>
+          </span>
         }
       >
         {creating && (

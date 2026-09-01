@@ -8,6 +8,7 @@ import {
   type HandlerTaskRes,
 } from '@socar/shared';
 import { ChartCanvas } from '@/components/charts/ChartCanvas';
+import { ExportButtons } from '@/components/ExportButtons';
 import { swrFetcher } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
 import { buildTaskBoard } from '@/lib/ops-tasks';
@@ -30,6 +31,15 @@ export function OpsDispatchTab() {
 
   return (
     <div className="space-y-4">
+      {/*
+        파일은 화면처럼 셋으로 가르지 않는다 — 쪼개면 합계가 어디에도 없고, 분류 기준(상태)은
+        열로 실려 있어 받는 쪽에서 언제든 다시 가를 수 있다 (M4-4).
+      */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-gray-400">작업 {data ? `${data.length}건` : '불러오는 중'}</p>
+        <ExportButtons path="/ops/tasks" label="작업목록" />
+      </div>
+
       <Panel
         title="미배정 작업"
         action={

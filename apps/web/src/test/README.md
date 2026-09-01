@@ -25,6 +25,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 | `sse.ts` | SSE 대역 — `stubEventSource()` · `lastEventSource().emit(payload)` |
 | `chart.ts` | Chart.js 대역 — `chartLibMock()` · `chartInstances()`/`lastChart()`/`liveCharts()` |
+| `download.ts` | 파일 저장 대역 — `stubDownloads()`(Blob URL·앵커 클릭) |
 
 ## 쓰는 법
 
@@ -163,6 +164,21 @@ expect(chartInstances()[0].config.data.labels).toEqual(['1/1', '1/2']);
 ```
 
 기록은 `setup.ts`가 테스트마다 비운다(`resetCharts()`).
+
+## 내보내기(다운로드)
+
+jsdom에는 `URL.createObjectURL`도 진짜 다운로드도 없다. [`src/test/download.ts`](./download.ts)의
+`stubDownloads()`로 마지막 한 걸음(Blob URL 발급 · 앵커 클릭)만 대역을 세우면 **어떤 URL로
+무엇을 받아 어떤 이름으로 저장하는지**는 실제 코드(`lib/download.ts`)가 그대로 돈다.
+
+```tsx
+const saved = stubDownloads();
+await userEvent.click(screen.getByRole('button', { name: 'CSV' }));
+await waitFor(() => expect(saved).toHaveLength(1));
+expect(saved[0].filename).toBe('차량목록_대기_2026-09-01.csv'); // 서버가 붙인 이름
+```
+
+`FileReader`가 BOM을 인코딩 표식으로 걷어내므로 **BOM 자체는 API 쪽 테스트가 지킨다**.
 
 ## 동적 라우트 화면 — `useParams()`로 통일 (규약)
 

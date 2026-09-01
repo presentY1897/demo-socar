@@ -4,6 +4,7 @@ import {
   expiryDDay,
   isExpiringSoon,
   isLowFuel,
+  sortFleet,
   type CreateMaintenanceNoteDto,
   type CreateOpsVehicleDto,
   type OpsFleetDetailRes,
@@ -60,7 +61,10 @@ export class OpsFleetService {
 
     const rows = vehicles.map((v) => this.toRes(v, telemetry.get(v.id)!, upcoming.get(v.id), now));
     // 상태 필터는 계산 결과(대기/운행/탁송/정비)에 걸리므로 DB where로는 못 좁힌다
-    return query.state ? rows.filter((r) => r.state === query.state) : rows;
+    const filtered = query.state ? rows.filter((r) => r.state === query.state) : rows;
+    // 정렬도 계산값(연료·주행거리·다음 예약)에 걸린다. 규칙은 화면과 같은 함수(shared) —
+    // Export가 표에서 본 순서 그대로 나가야 해서 M4-4에서 서버로 끌어왔다
+    return sortFleet(filtered, query.sort, query.dir);
   }
 
   /** 상세 — 센서 + 스마트키 조작 이력 + 도입/보험 + 정비 메모 */

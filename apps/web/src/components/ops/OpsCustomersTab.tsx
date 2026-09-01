@@ -8,6 +8,7 @@ import {
   type OpsUserDetailRes,
   type OpsUserRiskRes,
 } from '@socar/shared';
+import { ExportButtons } from '@/components/ExportButtons';
 import { swrFetcher } from '@/lib/api';
 import { RESERVATION_STATUS_LABEL, fmtDateTime } from '@/lib/format';
 import { riskBadges } from '@/lib/ops-users';
@@ -34,8 +35,11 @@ export function OpsCustomersTab({ targetId }: { targetId?: string | null }) {
       <Panel
         title="유의 유저"
         action={
-          <span className="text-[11px] text-gray-400">
-            최근 {USER_RISK_WINDOW_DAYS}일 기준 {users ? `${users.length}명` : ''}
+          <span className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400">
+              최근 {USER_RISK_WINDOW_DAYS}일 기준 {users ? `${users.length}명` : ''}
+            </span>
+            <ExportButtons path="/ops/users/risk" label="유의유저" />
           </span>
         }
       >

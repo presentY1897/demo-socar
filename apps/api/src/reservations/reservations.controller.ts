@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   createReservationSchema,
   modifyReservationSchema,
@@ -13,6 +14,13 @@ import { CurrentUser } from '../auth/decorators';
 import type { JwtUser } from '../auth/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  buildExportFile,
+  exportDateStamp,
+  parseExportFormat,
+  respondExport,
+} from '../common/export/export';
+import { MY_RESERVATIONS_EXPORT, type MyReservationRow } from './reservations-export';
 import { ReservationsService } from './reservations.service';
 
 @Controller('reservations')
@@ -52,9 +60,28 @@ export class ReservationsController {
     return this.reservations.create(user, dto);
   }
 
+  /**
+   * 내 예약 목록. `?format=csv|json`이면 파일로 내려간다 (M4-4).
+   * 조회가 이미 로그인 사용자로 좁혀져 있어 Export도 **자기 예약만** 나간다.
+   */
   @Get('mine')
-  mine(@CurrentUser() user: JwtUser) {
-    return this.reservations.listMine(user.id);
+  async mine(
+    @CurrentUser() user: JwtUser,
+    @Query('format') rawFormat: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const rows = await this.reservations.listMine(user.id);
+    const format = parseExportFormat(rawFormat);
+    if (!format) return rows;
+    return respondExport(
+      res,
+      buildExportFile({
+        format,
+        spec: MY_RESERVATIONS_EXPORT,
+        rows: rows as unknown as MyReservationRow[],
+        parts: [exportDateStamp()],
+      }),
+    );
   }
 
   @Get(':id')

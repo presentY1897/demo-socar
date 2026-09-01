@@ -24,8 +24,33 @@ export const fuelTypeSchema = z.enum(['EV', 'GASOLINE', 'HYBRID']);
 export type FuelTypeValue = z.infer<typeof fuelTypeSchema>;
 export const vehicleStatusSchema = z.enum(['AVAILABLE', 'MAINTENANCE']);
 export const reservationStatusSchema = z.enum(['CONFIRMED', 'IN_USE', 'COMPLETED', 'CANCELED']);
+export type ReservationStatusValue = z.infer<typeof reservationStatusSchema>;
 export const rentalStatusSchema = z.enum(['IN_USE', 'RETURN_PENDING', 'COMPLETED']);
 export const roleSchema = z.enum(['USER', 'CORP_MEMBER', 'CORP_ADMIN', 'OPS_ADMIN', 'HANDLER']);
+
+/**
+ * 연료 종류·예약 상태의 한국어 표기.
+ *
+ * 원래 웹(`lib/format.ts`)에만 있었는데 M4-4의 CSV Export가 같은 말을 써야 해서 옮겼다 —
+ * 화면은 "이용 완료"인데 내려받은 파일은 `COMPLETED`이면 같은 데이터로 읽히지 않는다.
+ */
+export const FUEL_LABEL: Record<FuelTypeValue, string> = {
+  EV: '전기차',
+  GASOLINE: '가솔린',
+  HYBRID: '하이브리드',
+};
+
+export const RESERVATION_STATUS_LABEL: Record<ReservationStatusValue, string> = {
+  CONFIRMED: '예약 완료',
+  IN_USE: '이용 중',
+  COMPLETED: '이용 완료',
+  CANCELED: '취소됨',
+};
+
+export const VEHICLE_STATUS_LABEL: Record<z.infer<typeof vehicleStatusSchema>, string> = {
+  AVAILABLE: '운행 가능',
+  MAINTENANCE: '정비 중',
+};
 export const paymentKindSchema = z.enum(['UPFRONT', 'DRIVE_SETTLEMENT', 'PENALTY']);
 export const paymentStatusSchema = z.enum([
   'PENDING',

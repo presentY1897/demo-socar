@@ -14,19 +14,11 @@ export const todayKst = () => dayjs().format('YYYY-MM-DD');
 /** YYYY-MM-DD + 'HH:mm' → ISO (KST) */
 export const kstIso = (date: string, time: string) => `${date}T${time}:00+09:00`;
 
-export const RESERVATION_STATUS_LABEL: Record<string, string> = {
-  CONFIRMED: '예약 완료',
-  IN_USE: '이용 중',
-  COMPLETED: '이용 완료',
-  CANCELED: '취소됨',
-};
-
-/** 연료 종류 표기 — 차량 매뉴얼·운영 차량 표·등록 폼이 같은 문구를 본다 */
-export const FUEL_LABEL: Record<string, string> = {
-  EV: '전기차',
-  GASOLINE: '가솔린',
-  HYBRID: '하이브리드',
-};
+/**
+ * 예약 상태·연료 종류 표기는 shared가 단일 소스다 (M4-4).
+ * CSV Export가 같은 말을 써야 해서 웹에서 shared로 옮겼고, 화면 import 경로만 유지한다.
+ */
+export { FUEL_LABEL, RESERVATION_STATUS_LABEL, VEHICLE_STATUS_LABEL } from '@socar/shared';
 
 export const DISPATCH_STATUS_LABEL: Record<string, string> = {
   REQUESTED: '접수됨',

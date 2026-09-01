@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import {
+  OPS_VEHICLE_STATE_META,
   createMaintenanceNoteSchema,
   createOpsVehicleSchema,
   opsFleetQuerySchema,
@@ -10,6 +12,13 @@ import {
 import { CurrentUser, Roles } from '../../auth/decorators';
 import type { JwtUser } from '../../auth/jwt-auth.guard';
 import { ZodValidationPipe } from '../../common/zod-validation.pipe';
+import {
+  buildExportFile,
+  exportDateStamp,
+  parseExportFormat,
+  respondExport,
+} from '../../common/export/export';
+import { FLEET_EXPORT } from './fleet-export';
 import { OpsFleetService } from './fleet.service';
 
 /** 차량(Fleet) 탭 — 목록·상세·정비 메모 (M3-3, 화면은 M3-4) */
@@ -18,9 +27,26 @@ import { OpsFleetService } from './fleet.service';
 export class OpsFleetController {
   constructor(private readonly fleet: OpsFleetService) {}
 
+  /** `?format=csv|json`이면 파일로 내려간다 — 미지정이면 기존 JSON 그대로 (M4-4) */
   @Get()
-  list(@Query(new ZodValidationPipe(opsFleetQuerySchema)) query: OpsFleetQueryDto) {
-    return this.fleet.list(query);
+  async list(
+    @Query(new ZodValidationPipe(opsFleetQuerySchema)) query: OpsFleetQueryDto,
+    @Query('format') rawFormat: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const rows = await this.fleet.list(query);
+    const format = parseExportFormat(rawFormat);
+    if (!format) return rows;
+    return respondExport(
+      res,
+      buildExportFile({
+        format,
+        spec: FLEET_EXPORT,
+        rows,
+        // 어떤 조건으로 뽑았는지가 파일명에 남는다
+        parts: [query.state ? OPS_VEHICLE_STATE_META[query.state].label : null, exportDateStamp()],
+      }),
+    );
   }
 
   @Get(':id')

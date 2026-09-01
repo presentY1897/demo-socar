@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { leaseDDay } from '../corp/lease';
+import { fleetSortKeySchema, sortDirSchema } from '../ops/fleet-sort';
 
 /**
  * 운영 센터(`/ops`)의 판정 규칙과 요청 DTO — API 가드와 백오피스 화면이 같은 값을 본다.
@@ -171,10 +172,18 @@ export const createMaintenanceNoteSchema = z.object({
 });
 export type CreateMaintenanceNoteDto = z.infer<typeof createMaintenanceNoteSchema>;
 
-/** `GET /ops/fleet?state&zoneId` */
+/**
+ * `GET /ops/fleet?state&zoneId&sort&dir`
+ *
+ * 정렬은 화면이 하던 일이지만(M3-4) Export가 붙으면서 서버도 알아야 한다 —
+ * 표에서 본 순서와 내려받은 파일의 순서가 갈리면 같은 데이터로 보이지 않는다.
+ * 기본값(차량 번호 오름차순)은 정렬을 안 걸었을 때의 기존 순서와 같다.
+ */
 export const opsFleetQuerySchema = z.object({
   state: opsVehicleStateFilter(),
   zoneId: z.string().optional(),
+  sort: fleetSortKeySchema.default('plateNo'),
+  dir: sortDirSchema.default('asc'),
 });
 export type OpsFleetQueryDto = z.infer<typeof opsFleetQuerySchema>;
 

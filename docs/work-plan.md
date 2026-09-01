@@ -90,7 +90,7 @@
 | ☑ | [M4-1](task/m4-1-chartjs-migration.md) | Chart.js 전면 전환 — Recharts 제거(확정) | M3 |
 | ☑ | [M4-2](task/m4-2-report-api.md) | 리포트 빌더 API — 지표 5종 × 기간/groupBy/필터 | M3-3 |
 | ☑ | [M4-3](task/m4-3-report-ui.md) | 리포트 UI — 필터→차트+표 즉시 렌더 | M4-1·2 |
-| ☐ | [M4-4](task/m4-4-export.md) | Export — 리포트+목록 4종 CSV/JSON (BOM, 필터 반영) | M4-2 |
+| ☑ | [M4-4](task/m4-4-export.md) | Export — 리포트+목록 4종 CSV/JSON (BOM, 필터 반영) | M4-2 |
 | ☐ | [M4-5](task/m4-5-verify-deploy.md) | 검증·문서·배포 + 지원 준비 트랙 재개 리뷰 | M4-1~4 |
 
 ## M5 — MOCAR 비즈니스: 법인 플릿/리스 관리 서비스 분리 (L · 6개, 2·3차 피드백)

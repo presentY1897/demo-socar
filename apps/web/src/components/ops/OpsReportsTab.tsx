@@ -15,6 +15,7 @@ import {
   type ReportResponseRes,
 } from '@socar/shared';
 import { ChartCanvas } from '@/components/charts/ChartCanvas';
+import { ExportButtons } from '@/components/ExportButtons';
 import { swrFetcher } from '@/lib/api';
 import { dayTickLabel, formatChartValue } from '@/lib/chart-config';
 import { todayKst } from '@/lib/format';
@@ -68,7 +69,11 @@ export function OpsReportsTab() {
 
   return (
     <div className="space-y-4">
-      <Panel title="리포트 조건">
+      <Panel
+        title="리포트 조건"
+        // 조회에 쓰는 쿼리를 그대로 넘긴다 — 화면과 파일의 조건이 갈리지 않게
+        action={<ExportButtons path="/ops/reports" query={query} label="리포트" />}
+      >
         <div className="mt-2 grid gap-3 md:grid-cols-2">
           <FormField label="지표">
             <select
@@ -168,8 +173,6 @@ export function OpsReportsTab() {
             </button>
           ))}
         </div>
-
-        {/* 내보내기(CSV/JSON) 버튼이 붙는 자리 — 동작은 M4-4 */}
 
         <p className="mt-2 text-[11px] text-gray-400">
           {meta.hint}
