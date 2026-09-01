@@ -9,7 +9,17 @@ import {
   creditSchema,
   fleetListSchema,
   fleetVehicleDetailSchema,
+  opsAccountingSummarySchema,
+  opsAlertSchema,
+  opsFleetDetailSchema,
+  opsFleetVehicleSchema,
+  opsInquirySchema,
   opsLeaseSchema,
+  opsMaintenanceNoteSchema,
+  opsOverviewSchema,
+  opsUserDetailSchema,
+  opsUserRiskSchema,
+  opsZoneSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
   loginResponseSchema,
@@ -43,7 +53,18 @@ import {
   dispatchBoard,
   fleetList,
   fleetVehicleDetail,
+  opsAccountingSummary,
+  opsAlerts,
+  opsFleet,
+  opsFleetById,
+  opsFleetDetail,
+  opsInquiries,
   opsLeases,
+  opsOverview,
+  opsUserDetail,
+  opsUsersRisk,
+  opsZonePaid,
+  opsZones,
   dispatchRecommended,
   reservationConfirmed,
   incidentResultFull,
@@ -341,6 +362,109 @@ export const handlers = [
     const body = (await request.json()) as { note: string };
     return transitionTask(String(params.id), { status: 'DONE', completionNote: body.note });
   }),
+
+  // ── 운영 센터 /ops (M3-3 · 화면은 M3-4~6) ───────
+  // 백엔드 계약대로 기본 응답만 세워 둔다. 상태가 바뀌는 흐름(등록 → 표 반영, 답변 → ANSWERED)은
+  // 각 테스트가 server.use로 상태를 들고 있는 목을 덮어써서 검증한다.
+  http.get(url('/ops/overview'), () => json(opsOverviewSchema, opsOverview)),
+
+  http.get(url('/ops/alerts'), () =>
+    HttpResponse.json(opsAlerts.map((a) => opsAlertSchema.parse(a))),
+  ),
+
+  http.get(url('/ops/fleet'), ({ request }) => {
+    const state = new URL(request.url).searchParams.get('state');
+    const rows = state ? opsFleet.filter((v) => v.state === state) : opsFleet;
+    return HttpResponse.json(rows.map((v) => opsFleetVehicleSchema.parse(v)));
+  }),
+
+  http.get(url('/ops/fleet/:id'), ({ params }) => {
+    const detail = opsFleetById[String(params.id)];
+    return detail
+      ? json(opsFleetDetailSchema, detail)
+      : HttpResponse.json({ message: '차량을 찾을 수 없습니다' }, { status: 404 });
+  }),
+
+  http.post(url('/ops/fleet/:id/notes'), async ({ params, request }) => {
+    const body = (await request.json()) as { body: string };
+    return json(
+      opsMaintenanceNoteSchema,
+      {
+        id: 'note-new',
+        vehicleId: String(params.id),
+        body: body.body,
+        authorName: '최운영',
+        createdAt: new Date().toISOString(),
+      },
+      201,
+    );
+  }),
+
+  http.post(url('/ops/vehicles'), async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return json(
+      opsFleetDetailSchema,
+      {
+        ...opsFleetDetail,
+        id: 'veh-new',
+        modelName: String(body.modelName ?? '신규 차량'),
+        plateNo: String(body.plateNo ?? '99허 0001'),
+        state: 'IDLE',
+        nextReservation: null,
+      },
+      201,
+    );
+  }),
+
+  http.get(url('/ops/zones'), () =>
+    HttpResponse.json(opsZones.map((z) => opsZoneSchema.parse(z))),
+  ),
+
+  http.patch(url('/ops/zones/:id/contract'), async ({ params, request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return json(opsZoneSchema, {
+      ...opsZonePaid,
+      id: String(params.id),
+      contract: {
+        ...opsZonePaid.contract,
+        isPaid: Boolean(body.isPaid),
+        partnerName: (body.partnerName as string | null) ?? null,
+        monthlyFeeKrw: Number(body.monthlyFeeKrw ?? 0),
+      },
+    });
+  }),
+
+  http.get(url('/ops/users/risk'), () =>
+    HttpResponse.json(opsUsersRisk.map((u) => opsUserRiskSchema.parse(u))),
+  ),
+
+  http.get(url('/ops/users/:id'), () => json(opsUserDetailSchema, opsUserDetail)),
+
+  http.get(url('/ops/inquiries'), ({ request }) => {
+    const status = new URL(request.url).searchParams.get('status');
+    const rows = status ? opsInquiries.filter((i) => i.status === status) : opsInquiries;
+    return HttpResponse.json(rows.map((i) => opsInquirySchema.parse(i)));
+  }),
+
+  http.post(url('/ops/inquiries/:id/answer'), async ({ params, request }) => {
+    const body = (await request.json()) as { answer: string };
+    return json(
+      opsInquirySchema,
+      {
+        ...opsInquiries[0],
+        id: String(params.id),
+        status: 'ANSWERED',
+        answer: body.answer,
+        answeredAt: new Date().toISOString(),
+        answeredBy: { id: 'user-ops', name: '최운영' },
+      },
+      201,
+    );
+  }),
+
+  http.get(url('/ops/accounting/summary'), () =>
+    json(opsAccountingSummarySchema, opsAccountingSummary),
+  ),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

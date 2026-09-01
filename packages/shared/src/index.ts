@@ -12,6 +12,7 @@ export * from './schemas/dispatch';
 export * from './schemas/handler-task';
 export * from './schemas/incident';
 export * from './schemas/inquiry';
+export * from './schemas/ops';
 export * from './schemas/photo';
 export * from './schemas/reservation';
 export * from './schemas/telemetry';

@@ -7,6 +7,7 @@ import { inquiryCategorySchema, inquiryStatusSchema } from './inquiry';
 import { storedPhotoSchema } from './photo';
 import { corpGradeSchema } from '../corp/grade';
 import { leaseStatusSchema } from '../corp/lease';
+import { opsAlertKindSchema, opsAlertSeveritySchema, opsTabSchema } from './ops';
 import { insuranceTierSchema } from './reservation';
 import { opsVehicleStateSchema } from './telemetry';
 
@@ -549,6 +550,233 @@ export const opsLeaseSchema = bizLeaseSchema.extend({
   corporation: z.object({ id: z.string(), name: z.string() }),
 });
 export type OpsLeaseRes = z.infer<typeof opsLeaseSchema>;
+
+
+// ═══════════════════════ 운영 센터 (/ops · M3-3) ═══════════════════════
+
+/** `GET /ops/overview` — 운영 홈 상단 스탯 */
+export const opsOverviewSchema = z.object({
+  vehicleCount: z.number().int(),
+  inUseCount: z.number().int(),
+  inTransitCount: z.number().int(),
+  idleCount: z.number().int(),
+  maintenanceCount: z.number().int(),
+  /** 오늘(KST) 시작하는 예약 — 취소 제외 */
+  todayReservationCount: z.number().int(),
+  unassignedTaskCount: z.number().int(),
+  openInquiryCount: z.number().int(),
+  alertCount: z.number().int(),
+});
+export type OpsOverviewRes = z.infer<typeof opsOverviewSchema>;
+
+/**
+ * `GET /ops/alerts` 의 경고 1건.
+ * 항목을 누르면 `tab`/`targetId`로 해당 탭의 그 행으로 간다 (M3-4).
+ */
+export const opsAlertSchema = z.object({
+  /** `kind:targetId` — 목록 리렌더에서 안정적인 키 */
+  id: z.string(),
+  kind: opsAlertKindSchema,
+  severity: opsAlertSeveritySchema,
+  title: z.string(),
+  detail: z.string(),
+  tab: opsTabSchema,
+  targetId: z.string(),
+  /** 만기일·반납 예정 시각 등 관련 시각 */
+  at: z.string().nullable(),
+  /** 만기까지 남은 일수 (없는 종류는 null) */
+  dDay: z.number().int().nullable(),
+});
+export type OpsAlertRes = z.infer<typeof opsAlertSchema>;
+
+/** 차량 도입 원가·보험 (MOCAR가 쓴 돈 관점) */
+export const opsVehicleFinanceSchema = z.object({
+  acquisitionType: z.enum(['PURCHASE', 'LEASE']),
+  acquisitionCostKrw: z.number().int().nullable(),
+  monthlyLeaseKrw: z.number().int().nullable(),
+  acquiredAt: z.string(),
+  insurerName: z.string(),
+  insurancePremiumKrw: z.number().int(),
+  insuranceExpiresAt: z.string(),
+  /** 보험 만기까지 남은 일수 — 서버가 계산해 내려준다 (화면과 기준을 하나로) */
+  insuranceDDay: z.number().int(),
+  insuranceExpiringSoon: z.boolean(),
+});
+export type OpsVehicleFinanceRes = z.infer<typeof opsVehicleFinanceSchema>;
+
+/** `GET /ops/fleet` 의 원소 — 차량 표 한 줄 */
+export const opsFleetVehicleSchema = z.object({
+  id: z.string(),
+  modelName: z.string(),
+  plateNo: z.string(),
+  fuel: fuelTypeSchema,
+  seats: z.number().int(),
+  status: vehicleStatusSchema,
+  /** 대기/운행/탁송/정비 — 예약 가능 여부(status)와 다른 축이다 */
+  state: opsVehicleStateSchema,
+  corporationId: z.string().nullable(),
+  zone: z.object({ id: z.string(), name: z.string() }),
+  telemetry: vehicleTelemetrySchema,
+  lowFuel: z.boolean(),
+  nextReservation: z
+    .object({
+      id: z.string(),
+      startAt: z.string(),
+      endAt: z.string(),
+      userName: z.string(),
+    })
+    .nullable(),
+  insurance: z
+    .object({
+      insurerName: z.string(),
+      expiresAt: z.string(),
+      dDay: z.number().int(),
+      expiringSoon: z.boolean(),
+    })
+    .nullable(),
+});
+export type OpsFleetVehicleRes = z.infer<typeof opsFleetVehicleSchema>;
+
+/** `GET /ops/fleet/:id` — 센서 상세 + 조작 이력 + 도입/보험 + 정비 메모 */
+export const opsFleetDetailSchema = opsFleetVehicleSchema.extend({
+  finance: opsVehicleFinanceSchema.nullable(),
+  controlLogs: z.array(
+    z.object({
+      id: z.string(),
+      action: vehicleControlActionSchema,
+      at: z.string(),
+      rentalId: z.string(),
+    }),
+  ),
+  maintenanceNotes: z.array(
+    z.object({
+      id: z.string(),
+      body: z.string(),
+      authorName: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+export type OpsFleetDetailRes = z.infer<typeof opsFleetDetailSchema>;
+
+/** `POST /ops/fleet/:id/notes` */
+export const opsMaintenanceNoteSchema = z.object({
+  id: z.string(),
+  vehicleId: z.string(),
+  body: z.string(),
+  authorName: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type OpsMaintenanceNoteRes = z.infer<typeof opsMaintenanceNoteSchema>;
+
+/** `GET /ops/zones` · `PATCH /ops/zones/:id/contract` — 계약 + 자리 현황 */
+export const opsZoneSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  region: z.string(),
+  address: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  capacity: z.number().int(),
+  corporationId: z.string().nullable(),
+  /** 지금 이 존에 배정된 차량 수 */
+  assignedCount: z.number().int(),
+  /** 면수 − 배정 = 남은 자리 (음수는 0으로 보지 않고 그대로 — 초과 배정을 숨기지 않는다) */
+  freeSlots: z.number().int(),
+  contract: z
+    .object({
+      isPaid: z.boolean(),
+      partnerName: z.string().nullable(),
+      monthlyFeeKrw: z.number().int(),
+      contractStart: z.string().nullable(),
+      contractEnd: z.string().nullable(),
+      dDay: z.number().int().nullable(),
+      expiringSoon: z.boolean(),
+    })
+    .nullable(),
+});
+export type OpsZoneRes = z.infer<typeof opsZoneSchema>;
+
+/** `GET /ops/users/risk` 의 원소 — 임계치를 넘은 유저만 실린다 */
+export const opsUserRiskSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  role: roleSchema,
+  lateReturnCount: z.number().int(),
+  incidentCount: z.number().int(),
+  paymentFailCount: z.number().int(),
+  /** 정렬용 가중합 — 화면은 배지(횟수)를 보여준다 */
+  riskScore: z.number(),
+  lastLateAt: z.string().nullable(),
+});
+export type OpsUserRiskRes = z.infer<typeof opsUserRiskSchema>;
+
+/** `GET /ops/users/:id` — 유저 클릭 시 여는 최근 예약/사고 이력 (M3-5) */
+export const opsUserDetailSchema = opsUserRiskSchema.extend({
+  recentReservations: z.array(
+    z.object({
+      id: z.string(),
+      startAt: z.string(),
+      endAt: z.string(),
+      status: reservationStatusSchema,
+      vehicle: z.object({ modelName: z.string(), plateNo: z.string() }),
+      lateMinutes: z.number().int(),
+      distanceKm: z.number().nullable(),
+    }),
+  ),
+  recentIncidents: z.array(
+    z.object({
+      id: z.string(),
+      rentalId: z.string(),
+      description: z.string(),
+      status: incidentStatusSchema,
+      createdAt: z.string(),
+    }),
+  ),
+});
+export type OpsUserDetailRes = z.infer<typeof opsUserDetailSchema>;
+
+/** `GET /ops/inquiries` · `POST /ops/inquiries/:id/answer` — 문의함 */
+export const opsInquirySchema = inquirySchema.extend({
+  user: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+  vehicle: z.object({ id: z.string(), modelName: z.string(), plateNo: z.string() }).nullable(),
+  answeredBy: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+export type OpsInquiryRes = z.infer<typeof opsInquirySchema>;
+
+/**
+ * `GET /ops/accounting/summary` — 월 손익.
+ *
+ * 매출은 기간 집계(실제 결제), 비용은 **월 고정비**(리스료·보험료·주차장 계약비)라
+ * 성격이 다르다. 그래서 기간(days)을 바꾸면 매출만 움직인다 — 화면이 이 점을 표기해야 한다.
+ */
+export const opsAccountingSummarySchema = z.object({
+  days: z.number().int(),
+  revenue: z.object({
+    /** 이용 결제 (CAPTURED 합계) */
+    rentalKrw: z.number().int(),
+    /** 법인 리스 매출 — 진행 중 계약의 월 리스료 합계 */
+    leaseKrw: z.number().int(),
+    totalKrw: z.number().int(),
+  }),
+  cost: z.object({
+    /** MOCAR가 내는 차량 월 리스료 */
+    vehicleLeaseKrw: z.number().int(),
+    insuranceKrw: z.number().int(),
+    zoneContractKrw: z.number().int(),
+    totalKrw: z.number().int(),
+  }),
+  profitKrw: z.number().int(),
+  marginPct: z.number(),
+  counts: z.object({
+    vehicleCount: z.number().int(),
+    leasedVehicleCount: z.number().int(),
+    paidZoneCount: z.number().int(),
+    activeLeaseCount: z.number().int(),
+  }),
+});
+export type OpsAccountingSummaryRes = z.infer<typeof opsAccountingSummarySchema>;
 
 // ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
 

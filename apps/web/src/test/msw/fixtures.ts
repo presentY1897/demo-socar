@@ -8,7 +8,16 @@ import {
   paymentSchema,
   fleetListSchema,
   fleetVehicleDetailSchema,
+  opsAccountingSummarySchema,
+  opsAlertSchema,
+  opsFleetDetailSchema,
+  opsFleetVehicleSchema,
+  opsInquirySchema,
   opsLeaseSchema,
+  opsOverviewSchema,
+  opsUserDetailSchema,
+  opsUserRiskSchema,
+  opsZoneSchema,
   dispatchRequestSchema,
   dispatchBoardSchema,
   pricingPlanSchema,
@@ -29,6 +38,11 @@ import {
   type HandlerTaskRes,
   type IncidentResultRes,
   type InquiryRes,
+  type OpsAlertRes,
+  type OpsFleetVehicleRes,
+  type OpsInquiryRes,
+  type OpsUserRiskRes,
+  type OpsZoneRes,
   type RentalUsageRes,
   type ReservationRes,
   type VehicleManualRes,
@@ -812,4 +826,268 @@ export const userHandler = make(authUserSchema, {
   role: 'HANDLER',
   corporationId: null,
   corpGrade: null,
+});
+
+// ═════════════════════ 운영 센터 /ops (M3-3 · 화면은 M3-4~6) ═════════════════════
+// 백엔드는 M3-3에서 끝났고 화면은 다음 작업이다. 픽스처와 기본 핸들러를 미리 두어
+// M3-4~6이 목 작성부터 시작하지 않게 한다. 값은 시드 데모 케이스를 본떴다
+// (연료 부족 1대 · 보험 만기 임박 1대 · 계약 만료 임박 1존 · 지연 반납 진행 중 1건).
+
+const daysFromNow = (d: number) => new Date(Date.now() + d * 24 * 3600 * 1000).toISOString();
+
+const telemetryOf = (over: Partial<{ fuelPct: number; odometerKm: number; lat: number; lng: number }> = {}) => ({
+  fuelPct: 68,
+  odometerKm: 24310.5,
+  doorLocked: true,
+  engineOn: false,
+  lat: zoneGangnam.lat,
+  lng: zoneGangnam.lng,
+  updatedAt: hoursFromNow(-0.2),
+  ...over,
+});
+
+/** 대기 중 — 표의 기본 행 */
+export const opsFleetIdle = make(opsFleetVehicleSchema, {
+  id: vehicleAvante.id,
+  modelName: vehicleAvante.modelName,
+  plateNo: vehicleAvante.plateNo,
+  fuel: 'GASOLINE',
+  seats: 5,
+  status: 'AVAILABLE',
+  state: 'IDLE',
+  corporationId: null,
+  zone: { id: zoneGangnam.id, name: zoneGangnam.name },
+  telemetry: telemetryOf(),
+  lowFuel: false,
+  nextReservation: {
+    id: 'resv-1',
+    startAt: hoursFromNow(4),
+    endAt: hoursFromNow(8),
+    userName: '김소카',
+  },
+  insurance: {
+    insurerName: '모카손해보험',
+    expiresAt: daysFromNow(210),
+    dDay: 210,
+    expiringSoon: false,
+  },
+});
+
+/** 운행 중 + 연료 부족 — 경고 피드와 이어지는 행 */
+export const opsFleetLowFuel = make(opsFleetVehicleSchema, {
+  ...opsFleetIdle,
+  id: vehicleIoniq.id,
+  modelName: vehicleIoniq.modelName,
+  plateNo: vehicleIoniq.plateNo,
+  fuel: 'EV',
+  state: 'IN_USE',
+  telemetry: telemetryOf({ fuelPct: 12.4, odometerKm: 41022.8, lat: 37.503, lng: 127.031 }),
+  lowFuel: true,
+  insurance: {
+    insurerName: '한빛화재해상',
+    expiresAt: daysFromNow(18),
+    dDay: 18,
+    expiringSoon: true,
+  },
+});
+
+/** 정비 중 — 상태 필터가 실제로 갈리는지 보려면 세 번째 상태가 필요하다 */
+export const opsFleetMaintenance = make(opsFleetVehicleSchema, {
+  ...opsFleetIdle,
+  id: 'veh-maintenance',
+  modelName: '레이',
+  plateNo: '56다 7890',
+  status: 'MAINTENANCE',
+  state: 'MAINTENANCE',
+  nextReservation: null,
+  telemetry: telemetryOf({ fuelPct: 44 }),
+});
+
+export const opsFleet: OpsFleetVehicleRes[] = [opsFleetIdle, opsFleetLowFuel, opsFleetMaintenance];
+
+export const opsFleetDetail = make(opsFleetDetailSchema, {
+  ...opsFleetLowFuel,
+  finance: {
+    acquisitionType: 'LEASE',
+    acquisitionCostKrw: null,
+    monthlyLeaseKrw: 450000,
+    acquiredAt: daysFromNow(-400),
+    insurerName: '한빛화재해상',
+    insurancePremiumKrw: 52000,
+    insuranceExpiresAt: daysFromNow(18),
+    insuranceDDay: 18,
+    insuranceExpiringSoon: true,
+  },
+  controlLogs: [
+    { id: 'log-2', action: 'IGNITION_ON', at: hoursFromNow(-1.5), rentalId: 'rental-in-use' },
+    { id: 'log-1', action: 'UNLOCK', at: hoursFromNow(-1.6), rentalId: 'rental-in-use' },
+  ],
+  maintenanceNotes: [
+    { id: 'note-1', body: '앞 타이어 편마모 확인 — 정비소 입고 예정', authorName: '최운영', createdAt: hoursFromNow(-20) },
+  ],
+});
+
+export const opsFleetById: Record<string, typeof opsFleetDetail> = {
+  [opsFleetDetail.id]: opsFleetDetail,
+};
+
+export const opsOverview = make(opsOverviewSchema, {
+  vehicleCount: 3,
+  inUseCount: 1,
+  inTransitCount: 0,
+  idleCount: 1,
+  maintenanceCount: 1,
+  todayReservationCount: 4,
+  unassignedTaskCount: 2,
+  openInquiryCount: 2,
+  alertCount: 4,
+});
+
+export const opsAlerts: OpsAlertRes[] = [
+  make(opsAlertSchema, {
+    id: 'LATE_RETURN:user-personal',
+    kind: 'LATE_RETURN',
+    severity: 'danger',
+    title: '김소카님 반납 1시간 35분 지연',
+    detail: '아이오닉 5 34나 5678 — 반납 예정 시각이 지났는데 아직 이용 중입니다',
+    tab: 'customers',
+    targetId: 'user-personal',
+    at: hoursFromNow(-1.6),
+    dDay: null,
+  }),
+  make(opsAlertSchema, {
+    id: `LOW_FUEL:${vehicleIoniq.id}`,
+    kind: 'LOW_FUEL',
+    severity: 'warn',
+    title: '아이오닉 5 34나 5678 배터리 12%',
+    detail: '배터리가 12% 남았어요 — 충전이 필요합니다',
+    tab: 'fleet',
+    targetId: vehicleIoniq.id,
+    at: null,
+    dDay: null,
+  }),
+  make(opsAlertSchema, {
+    id: `INSURANCE_EXPIRING:${vehicleIoniq.id}`,
+    kind: 'INSURANCE_EXPIRING',
+    severity: 'warn',
+    title: '아이오닉 5 34나 5678 보험 D-18',
+    detail: '한빛화재해상 보험이 만료됩니다',
+    tab: 'fleet',
+    targetId: vehicleIoniq.id,
+    at: daysFromNow(18),
+    dDay: 18,
+  }),
+  make(opsAlertSchema, {
+    id: `CONTRACT_EXPIRING:${zoneGangnam.id}`,
+    kind: 'CONTRACT_EXPIRING',
+    severity: 'warn',
+    title: '강남역 공영주차장 계약 D-12',
+    detail: '하이파킹과의 주차장 계약이 만료됩니다',
+    tab: 'zones',
+    targetId: zoneGangnam.id,
+    at: daysFromNow(12),
+    dDay: 12,
+  }),
+];
+
+/** 유료 계약 + 만료 임박 + 잔여 자리 넉넉 */
+export const opsZonePaid = make(opsZoneSchema, {
+  ...zoneGangnam,
+  assignedCount: 2,
+  freeSlots: 10,
+  contract: {
+    isPaid: true,
+    partnerName: '하이파킹',
+    monthlyFeeKrw: 250000,
+    contractStart: daysFromNow(-350),
+    contractEnd: daysFromNow(12),
+    dDay: 12,
+    expiringSoon: true,
+  },
+});
+
+/** 무료 존 + 잔여 0 (화면이 경고를 띄워야 하는 행) */
+export const opsZoneFull = make(opsZoneSchema, {
+  ...zoneYeoksam,
+  assignedCount: 6,
+  freeSlots: 0,
+  contract: {
+    isPaid: false,
+    partnerName: null,
+    monthlyFeeKrw: 0,
+    contractStart: null,
+    contractEnd: null,
+    dDay: null,
+    expiringSoon: false,
+  },
+});
+
+export const opsZones: OpsZoneRes[] = [opsZonePaid, opsZoneFull];
+
+export const opsUserRisky = make(opsUserRiskSchema, {
+  id: userPersonal.id,
+  name: userPersonal.name,
+  email: userPersonal.email,
+  role: 'USER',
+  lateReturnCount: 3,
+  incidentCount: 1,
+  paymentFailCount: 2,
+  riskScore: 10,
+  lastLateAt: hoursFromNow(-30),
+});
+
+export const opsUsersRisk: OpsUserRiskRes[] = [opsUserRisky];
+
+export const opsUserDetail = make(opsUserDetailSchema, {
+  ...opsUserRisky,
+  recentReservations: [
+    {
+      id: 'resv-past-1',
+      startAt: hoursFromNow(-30),
+      endAt: hoursFromNow(-26),
+      status: 'COMPLETED',
+      vehicle: { modelName: '아반떼', plateNo: '12가 3456' },
+      lateMinutes: 45,
+      distanceKm: 32.4,
+    },
+  ],
+  recentIncidents: [
+    {
+      id: 'incident-1',
+      rentalId: 'rental-past-1',
+      description: '주차 중 우측 후방 범퍼 접촉',
+      status: 'PROCESSING',
+      createdAt: hoursFromNow(-28),
+    },
+  ],
+});
+
+export const opsInquiryPending = make(opsInquirySchema, {
+  ...inquiryOpen,
+  user: { id: userPersonal.id, name: userPersonal.name, email: userPersonal.email },
+  vehicle: { id: vehicleAvante.id, modelName: vehicleAvante.modelName, plateNo: vehicleAvante.plateNo },
+  answeredBy: null,
+});
+
+export const opsInquiryDone = make(opsInquirySchema, {
+  ...inquiryAnswered,
+  user: { id: userPersonal.id, name: userPersonal.name, email: userPersonal.email },
+  vehicle: null,
+  answeredBy: { id: 'user-ops', name: '최운영' },
+});
+
+export const opsInquiries: OpsInquiryRes[] = [opsInquiryPending, opsInquiryDone];
+
+export const opsAccountingSummary = make(opsAccountingSummarySchema, {
+  days: 30,
+  revenue: { rentalKrw: 4_120_000, leaseKrw: 1_580_000, totalKrw: 5_700_000 },
+  cost: {
+    vehicleLeaseKrw: 2_050_000,
+    insuranceKrw: 820_000,
+    zoneContractKrw: 1_250_000,
+    totalKrw: 4_120_000,
+  },
+  profitKrw: 1_580_000,
+  marginPct: 27.7,
+  counts: { vehicleCount: 73, leasedVehicleCount: 25, paidZoneCount: 20, activeLeaseCount: 2 },
 });

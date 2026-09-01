@@ -114,6 +114,22 @@ await userEvent.upload(screen.getByLabelText('사진 촬영'), jpegFile());
 2. `msw/fixtures.ts`에 그 스키마로 `parse`한 픽스처 추가
 3. `msw/handlers.ts`에 기본 핸들러 추가
 
+### 운영 센터(`/ops`) 목은 이미 있다 — M3-4~6용
+
+M3-3이 백엔드를 끝내면서 픽스처와 기본 핸들러를 미리 넣어 두었다. 화면 작업은 목을
+새로 쓰지 말고 이걸 쓰고, 상태가 바뀌는 흐름만 `server.use`로 덮어쓰면 된다.
+
+| 픽스처 | 내용 |
+|---|---|
+| `opsOverview` · `opsAlerts` | 운영 홈 스탯 · 경고 4종(지연 반납이 맨 위) |
+| `opsFleet` · `opsFleetDetail` | 대기/운행(연료 부족)/정비 3행 · 상세(조작 이력·도입/보험·정비 메모) |
+| `opsZones` | 유료+만료 임박 1곳 · 무료+잔여 0 1곳 |
+| `opsUsersRisk` · `opsUserDetail` | 유의 유저 1명 + 최근 예약/사고 |
+| `opsInquiries` | 답변 대기 1건 + 답변 완료 1건 |
+| `opsAccountingSummary` | 매출·비용·손익 |
+
+`GET /ops/fleet?state=`와 `GET /ops/inquiries?status=`는 기본 핸들러가 실제로 필터링한다.
+
 ## 동적 라우트 화면 — `useParams()`로 통일 (규약)
 
 **클라이언트 컴포넌트(`'use client'`)는 라우트 파라미터를 `useParams()`로만 읽는다.**
