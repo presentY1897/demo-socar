@@ -3,6 +3,8 @@ import {
   conditionReportSchema,
   couponSchema,
   paymentSchema,
+  dispatchRequestSchema,
+  dispatchBoardSchema,
   pricingPlanSchema,
   rentalSchema,
   incidentResultSchema,
@@ -440,4 +442,78 @@ export const reservationDelivery = make(reservationSchema, {
   deliveryLabel: '회사 정문 앞',
   deliveryFeeKrw: 6000,
   totalUpfrontKrw: 28400,
+});
+
+// ─────────────────── 비즈니스(법인) 배차 ───────────────────
+
+export const userCorpMember = make(authUserSchema, {
+  id: 'user-corp-member',
+  email: 'member@demo.mocar.kr',
+  name: '이직원',
+  role: 'CORP_MEMBER',
+  corporationId: 'corp-1',
+});
+
+/** 결정 대기(RECOMMENDED) 요청 1건 — 담당자가 승인/반려할 수 있는 상태 */
+export const dispatchRecommended = make(dispatchRequestSchema, {
+  id: 'disp-1',
+  purpose: '판교 거래처 미팅',
+  desiredStartAt: '2030-01-02T01:00:00.000Z',
+  desiredEndAt: '2030-01-02T03:00:00.000Z',
+  status: 'RECOMMENDED',
+  rejectReason: null,
+  requester: { name: userCorpMember.name },
+  candidates: [
+    {
+      id: 'cand-1',
+      rank: 1,
+      score: 87.5,
+      isDedicated: true,
+      walkSeconds: 180,
+      walkMeters: 220,
+      bufferMinutes: 45,
+      lateRiskPct: 4.2,
+      reasons: ['법인 전용 차량', '도보 3분'],
+      vehicle: {
+        id: vehicleAvante.id,
+        modelName: vehicleAvante.modelName,
+        plateNo: vehicleAvante.plateNo,
+        zone: { name: '데모컴퍼니 사옥 주차장' },
+      },
+    },
+  ],
+  reservation: null,
+});
+
+export const dispatchBoard = make(dispatchBoardSchema, {
+  date: '2030-01-02',
+  office: { name: '주식회사 데모컴퍼니', officeAddress: '서울 성동구 성수이로 118' },
+  vehicles: [
+    {
+      id: vehicleAvante.id,
+      modelName: vehicleAvante.modelName,
+      plateNo: vehicleAvante.plateNo,
+      zone: { name: '데모컴퍼니 사옥 주차장' },
+      reservations: [
+        {
+          id: 'resv-board-1',
+          startAt: '2030-01-02T01:00:00.000Z',
+          endAt: '2030-01-02T03:00:00.000Z',
+          status: 'CONFIRMED',
+          user: { name: userCorpMember.name },
+          dispatch: { id: dispatchRecommended.id, purpose: dispatchRecommended.purpose },
+        },
+      ],
+    },
+  ],
+  requests: [
+    {
+      id: dispatchRecommended.id,
+      purpose: dispatchRecommended.purpose,
+      status: dispatchRecommended.status,
+      desiredStartAt: dispatchRecommended.desiredStartAt,
+      desiredEndAt: dispatchRecommended.desiredEndAt,
+      requester: { name: userCorpMember.name },
+    },
+  ],
 });

@@ -7,12 +7,13 @@ import {
   type CreateDispatchRequestDto,
   type RejectDispatchDto,
 } from '@socar/shared';
-import { CurrentUser, Roles } from '../auth/decorators';
-import type { JwtUser } from '../auth/jwt-auth.guard';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { CurrentUser, Roles } from '../../auth/decorators';
+import type { JwtUser } from '../../auth/jwt-auth.guard';
+import { ZodValidationPipe } from '../../common/zod-validation.pipe';
 import { DispatchService } from './dispatch.service';
 
-@Controller('dispatch')
+/** 법인 배차 — biz 네임스페이스(`/biz/dispatch/*`). 구 경로 `/dispatch/*`는 폐기됐다. */
+@Controller('biz/dispatch')
 export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}
 

@@ -3,33 +3,10 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
+import type { DispatchRequestRes } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
 import { DISPATCH_STATUS_LABEL, fmtDateTime, kstIso, todayKst } from '@/lib/format';
 import { useSession } from '@/lib/session';
-
-interface Candidate {
-  id: string;
-  rank: number;
-  score: number;
-  isDedicated: boolean;
-  walkSeconds: number;
-  walkMeters: number;
-  bufferMinutes: number;
-  lateRiskPct: number;
-  reasons: string[];
-  vehicle: { modelName: string; plateNo: string; zone: { name: string } };
-}
-interface DispatchRequest {
-  id: string;
-  purpose: string;
-  desiredStartAt: string;
-  desiredEndAt: string;
-  status: string;
-  rejectReason: string | null;
-  requester: { name: string };
-  candidates: Candidate[];
-  reservation: { id: string; status: string } | null;
-}
 
 const STATUS_STYLE: Record<string, string> = {
   REQUESTED: 'bg-gray-100 text-gray-500',
@@ -43,10 +20,10 @@ const TIMES = Array.from({ length: 48 }, (_, i) =>
   `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`,
 );
 
-export default function OfficePage() {
-  const { user, ready } = useSession();
-  const { data: requests, mutate } = useSWR<DispatchRequest[]>(
-    user ? '/dispatch/requests' : null,
+export default function BizDispatchPage() {
+  const { user } = useSession();
+  const { data: requests, mutate } = useSWR<DispatchRequestRes[]>(
+    user ? '/biz/dispatch/requests' : null,
     swrFetcher,
   );
 
@@ -59,20 +36,12 @@ export default function OfficePage() {
 
   const isAdmin = user?.role === 'CORP_ADMIN';
 
-  if (ready && (!user || (user.role !== 'CORP_MEMBER' && user.role !== 'CORP_ADMIN'))) {
-    return (
-      <p className="py-16 text-center text-sm text-gray-400">
-        법인 계정(임직원/배차 담당)으로 로그인하면 이용할 수 있어요
-      </p>
-    );
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api('/dispatch/requests', {
+      await api('/biz/dispatch/requests', {
         method: 'POST',
         body: {
           purpose,
@@ -94,7 +63,7 @@ export default function OfficePage() {
     setError(null);
     try {
       if (action === 'approve') {
-        await api(`/dispatch/requests/${requestId}/approve`, {
+        await api(`/biz/dispatch/requests/${requestId}/approve`, {
           method: 'POST',
           body: { candidateId },
         });
@@ -104,7 +73,7 @@ export default function OfficePage() {
           setBusy(false);
           return;
         }
-        await api(`/dispatch/requests/${requestId}/reject`, { method: 'POST', body: { reason } });
+        await api(`/biz/dispatch/requests/${requestId}/reject`, { method: 'POST', body: { reason } });
       }
       await mutate();
     } catch (err) {
@@ -117,7 +86,7 @@ export default function OfficePage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-4">
-      <h1 className="text-xl font-bold">오피스 배차</h1>
+      <h1 className="text-xl font-bold">배차</h1>
       <p className="mt-1 text-sm text-gray-500">
         {isAdmin ? '배차 담당자 — 요청을 검토하고 근거와 함께 결정하세요' : '업무용 차량을 요청하면 담당자가 배정해요'}
       </p>

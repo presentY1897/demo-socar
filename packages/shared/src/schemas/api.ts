@@ -298,3 +298,81 @@ export const incidentResultSchema = z.object({
   }),
 });
 export type IncidentResultRes = z.infer<typeof incidentResultSchema>;
+// ─────────────────────────── 비즈니스(법인) — 배차 ───────────────────────────
+
+export const dispatchStatusSchema = z.enum([
+  'REQUESTED',
+  'RECOMMENDED',
+  'APPROVED',
+  'REJECTED',
+  'CANCELED',
+]);
+
+/** `GET /biz/dispatch/requests` 원소의 추천 후보 */
+export const dispatchCandidateSchema = z.object({
+  id: z.string(),
+  rank: z.number().int(),
+  score: z.number(),
+  isDedicated: z.boolean(),
+  walkSeconds: z.number().int(),
+  walkMeters: z.number().int(),
+  bufferMinutes: z.number().int(),
+  lateRiskPct: z.number(),
+  reasons: z.array(z.string()),
+  vehicle: z.object({
+    id: z.string(),
+    modelName: z.string(),
+    plateNo: z.string(),
+    zone: z.object({ name: z.string() }),
+  }),
+});
+export type DispatchCandidateRes = z.infer<typeof dispatchCandidateSchema>;
+
+/** `GET /biz/dispatch/requests` · `POST /biz/dispatch/requests` */
+export const dispatchRequestSchema = z.object({
+  id: z.string(),
+  purpose: z.string(),
+  desiredStartAt: z.string(),
+  desiredEndAt: z.string(),
+  status: dispatchStatusSchema,
+  rejectReason: z.string().nullable(),
+  requester: z.object({ name: z.string() }),
+  candidates: z.array(dispatchCandidateSchema),
+  reservation: z.object({ id: z.string(), status: z.string() }).nullable(),
+});
+export type DispatchRequestRes = z.infer<typeof dispatchRequestSchema>;
+
+/** `GET /biz/dispatch/board?date=YYYY-MM-DD` — 차량 × 시간 타임라인 */
+export const dispatchBoardSchema = z.object({
+  date: z.string(),
+  office: z.object({ name: z.string(), officeAddress: z.string() }),
+  vehicles: z.array(
+    z.object({
+      id: z.string(),
+      modelName: z.string(),
+      plateNo: z.string(),
+      zone: z.object({ name: z.string() }),
+      reservations: z.array(
+        z.object({
+          id: z.string(),
+          startAt: z.string(),
+          endAt: z.string(),
+          status: z.string(),
+          user: z.object({ name: z.string() }),
+          dispatch: z.object({ id: z.string(), purpose: z.string() }).nullable(),
+        }),
+      ),
+    }),
+  ),
+  requests: z.array(
+    z.object({
+      id: z.string(),
+      purpose: z.string(),
+      status: dispatchStatusSchema,
+      desiredStartAt: z.string(),
+      desiredEndAt: z.string(),
+      requester: z.object({ name: z.string() }),
+    }),
+  ),
+});
+export type DispatchBoardRes = z.infer<typeof dispatchBoardSchema>;

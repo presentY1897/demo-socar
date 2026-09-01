@@ -11,12 +11,22 @@ import {
   validateSlotRange,
   type CreateDispatchRequestDto,
 } from '@socar/shared';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReservationsService } from '../reservations/reservations.service';
-import { effectiveZoneIdAt } from '../common/vehicle-location';
-import type { JwtUser } from '../auth/jwt-auth.guard';
+import { PrismaService } from '../../prisma/prisma.service';
+import { effectiveZoneIdAt } from '../../common/vehicle-location';
+import type { JwtUser } from '../../auth/jwt-auth.guard';
+import {
+  RESERVATION_BOOKING,
+  type ReservationBookingPort,
+} from '../ports/reservation-booking.port';
 import { rankCandidates, type CandidateInput } from './scoring';
-import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from './travel/travel-time';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../../dispatch/travel/travel-time';
+
+/**
+ * 배차 추천/승인. biz 컨텍스트 안의 서비스라 소비자 도메인 **서비스**는 직접 부르지 않고
+ * `RESERVATION_BOOKING` 포트만 쓴다.
+ * 다만 후보 탐색은 아직 공용 DB의 zone/vehicle/reservation/rental 테이블을 직접 읽는다 —
+ * 별도 서비스로 떼려면 이 조회들이 "차량 가용성 조회" API로 바뀌어야 한다 (ADR-010 잔여 결합).
+ */
 
 /** 오피스에서 걸어갈 수 있다고 보는 최대 반경(직선거리 프리필터) */
 const CANDIDATE_RADIUS_M = 3000;
@@ -26,7 +36,7 @@ const TOP_N = 3;
 export class DispatchService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly reservations: ReservationsService,
+    @Inject(RESERVATION_BOOKING) private readonly booking: ReservationBookingPort,
     @Inject(TRAVEL_ESTIMATOR) private readonly travel: TravelTimeEstimator,
   ) {}
 
@@ -250,7 +260,9 @@ export class DispatchService {
 
     let reservation;
     try {
-      reservation = await this.reservations.create(
+      // 소비자 도메인 호출은 포트를 통해서만 — 전용 차량(리스)은 과금 없이 예약하고
+      // 동시성 방어(EXCLUDE 제약)는 일반 예약과 같은 경로를 그대로 탄다.
+      reservation = await this.booking.book(
         {
           id: requester.id,
           email: requester.email,
@@ -262,13 +274,9 @@ export class DispatchService {
           vehicleId: candidate.vehicleId,
           startAt: request.desiredStartAt.toISOString(),
           endAt: request.desiredEndAt.toISOString(),
-          insurance: 'STANDARD',
-          useCredit: false,
-          cardLast4: '9999', // 법인카드 (모의)
           idempotencyKey: `dispatch-${requestId}`,
+          corporateDedicated: candidate.isDedicated,
         },
-        // 전용 차량(FMS)은 과금 없이 예약 — 동시성 방어는 동일 경로
-        { corporateDedicated: candidate.isDedicated },
       );
     } catch (e) {
       if (e instanceof ConflictException) {

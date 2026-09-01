@@ -3,6 +3,8 @@ import {
   availabilitySchema,
   conditionReportSchema,
   creditSchema,
+  dispatchBoardSchema,
+  dispatchRequestSchema,
   loginResponseSchema,
   quoteBreakdownSchema,
   quote,
@@ -27,6 +29,8 @@ import {
   couponWelcome,
   rentalCompleted,
   rentalInUse,
+  dispatchBoard,
+  dispatchRecommended,
   reservationConfirmed,
   incidentResultFull,
   inquiryAnswered,
@@ -37,6 +41,7 @@ import {
   smartKeyLocked,
   usageEmpty,
   userCorpAdmin,
+  userCorpMember,
   userOpsAdmin,
   userPersonal,
   vehicleAvante,
@@ -66,6 +71,7 @@ const reservationsById = Object.fromEntries(
 );
 
 const DEMO_ACCOUNTS = [userPersonal, userCorpAdmin, userOpsAdmin];
+const DEMO_ACCOUNTS = [userPersonal, userCorpMember, userCorpAdmin, userOpsAdmin];
 
 /**
  * 기본 핸들러 — 대부분의 화면이 이 상태에서 렌더된다.
@@ -205,6 +211,24 @@ export const handlers = [
   http.post(url('/inquiries'), () => json(inquirySchema, inquiryOpen, 201)),
 
   http.post(url('/rentals/:id/incident'), () => json(incidentResultSchema, incidentResultFull, 201)),
+  // ── 비즈니스(법인) 배차 ─────────────────────────
+  http.get(url('/biz/dispatch/requests'), () =>
+    HttpResponse.json([dispatchRequestSchema.parse(dispatchRecommended)]),
+  ),
+
+  http.post(url('/biz/dispatch/requests'), () =>
+    json(dispatchRequestSchema, dispatchRecommended, 201),
+  ),
+
+  http.post(url('/biz/dispatch/requests/:id/approve'), () =>
+    json(dispatchRequestSchema, { ...dispatchRecommended, status: 'APPROVED', reservation: { id: 'resv-1', status: 'CONFIRMED' } }),
+  ),
+
+  http.post(url('/biz/dispatch/requests/:id/reject'), () =>
+    json(dispatchRequestSchema, { ...dispatchRecommended, status: 'REJECTED', rejectReason: '차량 부족' }),
+  ),
+
+  http.get(url('/biz/dispatch/board'), () => json(dispatchBoardSchema, dispatchBoard)),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

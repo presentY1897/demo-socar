@@ -3,27 +3,33 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/lib/session';
+import { BizShell } from './BizShell';
 
 const NAV = [
   { href: '/', label: '홈', icon: '🗺️', show: () => true },
   { href: '/reservations', label: '예약', icon: '🚗', show: (role?: string) => !!role },
   {
-    href: '/office',
-    label: '오피스',
+    href: '/biz',
+    label: '비즈니스',
     icon: '🏢',
     show: (role?: string) => role === 'CORP_MEMBER' || role === 'CORP_ADMIN',
-  },
-  {
-    href: '/office/board',
-    label: '보드',
-    icon: '📋',
-    show: (role?: string) => role === 'CORP_ADMIN',
   },
   { href: '/inquiries', label: '문의', icon: '💬', show: (role?: string) => !!role },
   { href: '/dashboard', label: '지표', icon: '📊', show: (role?: string) => role === 'OPS_ADMIN' },
 ];
 
+/**
+ * 루트 셸. `/biz/*`는 분리된 B2B 서비스라 소비자 셸 대신 BizShell을 쓴다 —
+ * 루트 레이아웃 하나로 두 서비스를 태우는 유일한 접점이고, 법인 서비스를
+ * 별도 앱으로 떼면 이 분기가 없어진다.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (pathname.startsWith('/biz')) return <BizShell>{children}</BizShell>;
+  return <ConsumerShell>{children}</ConsumerShell>;
+}
+
+function ConsumerShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -61,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="fixed inset-x-0 bottom-0 z-[1100] border-t border-gray-200 bg-white">
         <div className="mx-auto flex max-w-lg">
           {items.map((n) => {
-            const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href) && !(n.href === '/office' && pathname.startsWith('/office/board'));
+            const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
             return (
               <Link
                 key={n.href}

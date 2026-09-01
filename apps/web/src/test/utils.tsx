@@ -10,11 +10,12 @@ import {
 import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import type { AuthUser } from '@socar/shared';
 import { SessionProvider } from '@/lib/session';
-import { userCorpAdmin, userOpsAdmin, userPersonal } from './msw/fixtures';
+import { userCorpAdmin, userCorpMember, userOpsAdmin, userPersonal } from './msw/fixtures';
 
 /** 역할별 목 유저 — `renderWithProviders(ui, { user: MOCK_USERS.opsAdmin })` */
 export const MOCK_USERS = {
   personal: userPersonal,
+  corpMember: userCorpMember,
   corpAdmin: userCorpAdmin,
   opsAdmin: userOpsAdmin,
 } satisfies Record<string, AuthUser>;

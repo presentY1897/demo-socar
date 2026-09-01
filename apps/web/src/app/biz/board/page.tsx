@@ -3,38 +3,10 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
+import type { DispatchBoardRes } from '@socar/shared';
 import { swrFetcher } from '@/lib/api';
 import { DISPATCH_STATUS_LABEL, fmtTime, todayKst } from '@/lib/format';
 import { useSession } from '@/lib/session';
-
-interface BoardReservation {
-  id: string;
-  startAt: string;
-  endAt: string;
-  status: string;
-  user: { name: string };
-  dispatch: { id: string; purpose: string } | null;
-}
-interface BoardVehicle {
-  id: string;
-  modelName: string;
-  plateNo: string;
-  zone: { name: string };
-  reservations: BoardReservation[];
-}
-interface BoardData {
-  date: string;
-  office: { name: string; officeAddress: string };
-  vehicles: BoardVehicle[];
-  requests: {
-    id: string;
-    purpose: string;
-    status: string;
-    desiredStartAt: string;
-    desiredEndAt: string;
-    requester: { name: string };
-  }[];
-}
 
 /** KST 하루 기준 위치(%) */
 function pos(date: string, iso: string) {
@@ -46,8 +18,8 @@ function pos(date: string, iso: string) {
 export default function BoardPage() {
   const { user, ready } = useSession();
   const [date, setDate] = useState(todayKst());
-  const { data } = useSWR<BoardData>(
-    user?.role === 'CORP_ADMIN' ? `/dispatch/board?date=${date}` : null,
+  const { data } = useSWR<DispatchBoardRes>(
+    user?.role === 'CORP_ADMIN' ? `/biz/dispatch/board?date=${date}` : null,
     swrFetcher,
     { refreshInterval: 15000 },
   );

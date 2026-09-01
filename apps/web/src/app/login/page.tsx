@@ -12,6 +12,10 @@ const DEMO_ACCOUNTS = [
   { email: 'ops@demo.mocar.kr', label: '운영 어드민' },
 ];
 
+/** 법인 계정은 분리된 B2B 서비스(/biz)가 홈이다 */
+const landingFor = (role: string) =>
+  role === 'CORP_MEMBER' || role === 'CORP_ADMIN' ? '/biz' : '/';
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('user@demo.mocar.kr');
@@ -29,7 +33,7 @@ export default function LoginPage() {
         body: { email: overrideEmail ?? email, password: 'demo1234' },
       });
       setSession(res.accessToken, res.user);
-      router.push('/');
+      router.push(landingFor(res.user.role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '로그인에 실패했습니다');
     } finally {
