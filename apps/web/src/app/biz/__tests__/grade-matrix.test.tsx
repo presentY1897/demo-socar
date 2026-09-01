@@ -3,9 +3,10 @@ import { CORP_GRADES, CORP_PERMISSIONS, type CorpGrade } from '@socar/shared';
 import type { AuthUser } from '@socar/shared';
 import BoardPage from '@/app/biz/board/page';
 import BizDispatchPage from '@/app/biz/dispatch/page';
+import BizFleetPage from '@/app/biz/fleet/page';
 import BizMembersPage from '@/app/biz/members/page';
 import { AppShell } from '@/components/AppShell';
-import { corpMembers, dispatchBoard, dispatchRecommended } from '@/test/msw/fixtures';
+import { corpMembers, dispatchBoard, dispatchRecommended, fleetList } from '@/test/msw/fixtures';
 import { MOCK_USERS, renderWithProviders, screen } from '@/test/utils';
 
 /**
@@ -19,6 +20,7 @@ interface Exposure {
   /** 하단 탭 */
   배차탭: boolean;
   보드탭: boolean;
+  플릿탭: boolean;
   멤버탭: boolean;
   /** 배차 화면 */
   요청폼: boolean;
@@ -26,13 +28,14 @@ interface Exposure {
   /** URL 직접 접근 */
   보드화면: boolean;
   멤버화면: boolean;
+  플릿화면: boolean;
 }
 
 const MATRIX: Record<CorpGrade, Exposure> = {
-  VIEWER: { 배차탭: true, 보드탭: false, 멤버탭: false, 요청폼: false, 승인버튼: false, 보드화면: false, 멤버화면: false },
-  REQUESTER: { 배차탭: true, 보드탭: false, 멤버탭: false, 요청폼: true, 승인버튼: false, 보드화면: false, 멤버화면: false },
-  APPROVER: { 배차탭: true, 보드탭: true, 멤버탭: false, 요청폼: true, 승인버튼: true, 보드화면: true, 멤버화면: false },
-  MANAGER: { 배차탭: true, 보드탭: true, 멤버탭: true, 요청폼: true, 승인버튼: true, 보드화면: true, 멤버화면: true },
+  VIEWER: { 배차탭: true, 보드탭: false, 플릿탭: false, 멤버탭: false, 요청폼: false, 승인버튼: false, 보드화면: false, 멤버화면: false, 플릿화면: false },
+  REQUESTER: { 배차탭: true, 보드탭: false, 플릿탭: false, 멤버탭: false, 요청폼: true, 승인버튼: false, 보드화면: false, 멤버화면: false, 플릿화면: false },
+  APPROVER: { 배차탭: true, 보드탭: true, 플릿탭: false, 멤버탭: false, 요청폼: true, 승인버튼: true, 보드화면: true, 멤버화면: false, 플릿화면: false },
+  MANAGER: { 배차탭: true, 보드탭: true, 플릿탭: true, 멤버탭: true, 요청폼: true, 승인버튼: true, 보드화면: true, 멤버화면: true, 플릿화면: true },
 };
 
 const USER_BY_GRADE: Record<CorpGrade, AuthUser> = {
@@ -50,11 +53,13 @@ describe('등급별 화면 분기 매트릭스', () => {
         grade,
         배차탭: p.viewDispatch,
         보드탭: p.viewBoard,
+        플릿탭: p.manageFleet,
         멤버탭: p.manageMembers,
         요청폼: p.createRequest,
         승인버튼: p.approve,
         보드화면: p.viewBoard,
         멤버화면: p.manageMembers,
+        플릿화면: p.manageFleet,
       });
     }
   });
@@ -68,6 +73,7 @@ describe('등급별 화면 분기 매트릭스', () => {
     const tab = (name: RegExp) => screen.queryByRole('link', { name });
     expect(!!tab(/배차/)).toBe(MATRIX[grade].배차탭);
     expect(!!tab(/보드/)).toBe(MATRIX[grade].보드탭);
+    expect(!!tab(/플릿/)).toBe(MATRIX[grade].플릿탭);
     expect(!!tab(/멤버/)).toBe(MATRIX[grade].멤버탭);
   });
 
@@ -101,6 +107,20 @@ describe('등급별 화면 분기 매트릭스', () => {
       // 권한이 없으면 보드 API를 부르지 않고 안내만 (미핸들 요청은 MSW가 실패시킨다)
       expect(screen.getByText('접근 권한이 없어요')).toBeInTheDocument();
       expect(screen.getByText(/필요 등급: 승인/)).toBeInTheDocument(); // 최저 등급 안내
+    }
+  });
+
+  it.each(CORP_GRADES)('%s — /biz/fleet 직접 접근은 manageFleet 권한대로 갈린다', async (grade) => {
+    renderWithProviders(<BizFleetPage />, {
+      user: USER_BY_GRADE[grade],
+      pathname: '/biz/fleet',
+    });
+
+    if (MATRIX[grade].플릿화면) {
+      expect(await screen.findByText(fleetList.items[0].modelName)).toBeInTheDocument();
+    } else {
+      expect(screen.getByText('접근 권한이 없어요')).toBeInTheDocument();
+      expect(screen.queryByText(fleetList.items[0].modelName)).not.toBeInTheDocument();
     }
   });
 

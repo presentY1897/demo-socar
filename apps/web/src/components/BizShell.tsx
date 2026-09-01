@@ -23,6 +23,7 @@ interface BizNavItem {
 const BIZ_NAV: BizNavItem[] = [
   { href: '/biz/dispatch', label: '배차', icon: '🚘', permission: 'viewDispatch' },
   { href: '/biz/board', label: '보드', icon: '📋', permission: 'viewBoard' },
+  { href: '/biz/fleet', label: '플릿', icon: '🚙', permission: 'manageFleet' },
   { href: '/biz/members', label: '멤버', icon: '👥', permission: 'manageMembers' },
 ];
 

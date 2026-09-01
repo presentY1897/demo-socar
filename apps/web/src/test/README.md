@@ -21,7 +21,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `msw/handlers.ts` | 기본 핸들러 (존·차량·인증·예약·이용 플로우·문의/사고). 전 테스트 공통 상태 |
 | `msw/fixtures.ts` | 목 데이터. **shared 응답 스키마로 `parse`** 해서 만든다 |
 | `msw/server.ts` | `setupServer` 인스턴스 |
-| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터·SWR 캐시 주입, `MOCK_USERS`, `routeParams` |
+| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터(경로·쿼리·동적 파라미터)·SWR 캐시 주입, `MOCK_USERS`, `routeParams` |
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 
 ## 쓰는 법
@@ -37,6 +37,13 @@ const { userEvent, router } = renderWithProviders(<BookPage />, {
   user: MOCK_USERS.personal,
   pathname: '/book/veh-avante',
   searchParams: 'startAt=...&endAt=...',
+});
+
+// 동적 라우트(`[id]`) 화면 — useParams()가 읽을 값을 넣는다
+renderWithProviders(<BizFleetDetailPage />, {
+  user: MOCK_USERS.corpAdmin,
+  pathname: '/biz/fleet/veh-corp-ioniq',
+  params: { id: 'veh-corp-ioniq' },
 });
 await userEvent.click(screen.getByRole('button', { name: '결제하기' }));
 expect(router.push).toHaveBeenCalledWith('/reservations/resv-1');
@@ -104,3 +111,9 @@ await userEvent.upload(screen.getByLabelText('사진 촬영'), jpegFile());
 1. 응답 형태를 `packages/shared/src/schemas/api.ts`에 zod 스키마로 추가
 2. `msw/fixtures.ts`에 그 스키마로 `parse`한 픽스처 추가
 3. `msw/handlers.ts`에 기본 핸들러 추가
+
+## 동적 라우트 화면
+
+클라이언트 전용 화면은 라우트 파라미터를 `use(params)`가 아니라 **`useParams()`**로 읽는다.
+React 19는 클라이언트에서 만든 프로미스를 `use`로 받지 못해(`uncached promise`) 테스트에서
+화면 전체가 서스펜드된 채로 멈춘다 — `renderWithProviders`의 `params` 옵션이 그 값을 넣어 준다.

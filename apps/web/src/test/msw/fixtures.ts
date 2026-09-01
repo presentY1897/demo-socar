@@ -4,6 +4,9 @@ import {
   corpMemberSchema,
   couponSchema,
   paymentSchema,
+  fleetListSchema,
+  fleetVehicleDetailSchema,
+  opsLeaseSchema,
   dispatchRequestSchema,
   dispatchBoardSchema,
   pricingPlanSchema,
@@ -562,4 +565,143 @@ export const corpMembers = [
   member(userCorpMember, '2029-02-01T00:00:00.000Z'),
   member(userCorpApprover, '2029-03-01T00:00:00.000Z'),
   member(userCorpViewer, '2029-04-01T00:00:00.000Z'),
+];
+
+// ─────────────────── 비즈니스(법인) 플릿 · 리스 ───────────────────
+
+/** 만기 임박(D-12) 계약 — 화면의 강조 케이스 */
+const leaseIoniq = {
+  id: 'lease-ioniq',
+  corporationId: 'corp-1',
+  vehicleId: 'veh-corp-ioniq',
+  monthlyFeeKrw: 690000,
+  startAt: '2029-03-01T00:00:00.000Z',
+  endAt: '2030-01-14T00:00:00.000Z',
+  status: 'ACTIVE',
+  dDay: 12,
+  expiringSoon: true,
+  endedAt: null,
+  requestedAt: null,
+  requestedEndAt: null,
+  requestNote: null,
+  requestedBy: null,
+};
+
+/** 연장 요청이 올라가 있는 계약 — 처리 대기 표시 케이스 */
+const leaseCarnival = {
+  ...leaseIoniq,
+  id: 'lease-carnival',
+  vehicleId: 'veh-corp-carnival',
+  monthlyFeeKrw: 890000,
+  endAt: '2030-08-31T00:00:00.000Z',
+  dDay: 241,
+  expiringSoon: false,
+  status: 'EXTENSION_REQUESTED',
+  requestedAt: '2030-01-01T00:00:00.000Z',
+  requestedEndAt: '2031-08-31T00:00:00.000Z',
+  requestNote: '내년까지 계속 사용합니다',
+  requestedBy: { id: userCorpAdmin.id, name: userCorpAdmin.name },
+};
+
+const usageIoniq = {
+  windowDays: 30,
+  tripCount: 9,
+  usedDays: 12,
+  totalHours: 26.5,
+  distanceKm: 412.4,
+  utilizationPct: 40,
+};
+
+export const fleetList = make(fleetListSchema, {
+  summary: {
+    vehicleCount: 2,
+    activeLeaseCount: 2,
+    monthlyTotalKrw: 1580000,
+    expiringSoonCount: 1,
+    pendingRequestCount: 1,
+  },
+  items: [
+    {
+      id: 'veh-corp-ioniq',
+      modelName: '아이오닉 5',
+      plateNo: '00허 0001',
+      fuel: 'EV',
+      seats: 5,
+      status: 'AVAILABLE',
+      zone: { id: 'zone-corp', name: '데모컴퍼니 사옥 주차장' },
+      lease: leaseIoniq,
+      usage: usageIoniq,
+    },
+    {
+      id: 'veh-corp-carnival',
+      modelName: '카니발',
+      plateNo: '00허 0002',
+      fuel: 'GASOLINE',
+      seats: 7,
+      status: 'AVAILABLE',
+      zone: { id: 'zone-corp', name: '데모컴퍼니 사옥 주차장' },
+      lease: leaseCarnival,
+      usage: { ...usageIoniq, tripCount: 4, usedDays: 5, utilizationPct: 16.7 },
+    },
+  ],
+});
+
+export const fleetVehicleDetail = make(fleetVehicleDetailSchema, {
+  ...fleetList.items[0],
+  contracts: [
+    leaseIoniq,
+    {
+      ...leaseIoniq,
+      id: 'lease-ioniq-prev',
+      monthlyFeeKrw: 650000,
+      startAt: '2027-09-01T00:00:00.000Z',
+      endAt: '2029-03-01T00:00:00.000Z',
+      status: 'ENDED',
+      dDay: -320,
+      expiringSoon: false,
+      endedAt: '2029-03-01T00:00:00.000Z',
+    },
+  ],
+  trips: [
+    {
+      id: 'trip-1',
+      startAt: '2029-12-28T01:00:00.000Z',
+      endAt: '2029-12-28T04:00:00.000Z',
+      returnedAt: '2029-12-28T04:10:00.000Z',
+      status: 'COMPLETED',
+      distanceKm: 42.5,
+      lateMinutes: 10,
+      user: { id: userCorpMember.id, name: userCorpMember.name },
+      purpose: '판교 거래처 미팅',
+    },
+    {
+      id: 'trip-2',
+      startAt: '2029-12-20T02:00:00.000Z',
+      endAt: '2029-12-20T05:00:00.000Z',
+      returnedAt: '2029-12-20T05:00:00.000Z',
+      status: 'COMPLETED',
+      distanceKm: 18,
+      lateMinutes: 0,
+      user: { id: userCorpApprover.id, name: userCorpApprover.name },
+      purpose: null,
+    },
+  ],
+  memberUsage: [
+    { id: userCorpMember.id, name: userCorpMember.name, tripCount: 6, totalHours: 18, distanceKm: 300.4 },
+    { id: userCorpApprover.id, name: userCorpApprover.name, tripCount: 3, totalHours: 8.5, distanceKm: 112 },
+  ],
+});
+
+/** `GET /ops/leases` — 처리 대기가 먼저 */
+export const opsLeases = [
+  make(opsLeaseSchema, {
+    ...leaseCarnival,
+    vehicle: { id: 'veh-corp-carnival', modelName: '카니발', plateNo: '00허 0002' },
+    corporation: { id: 'corp-1', name: '주식회사 데모컴퍼니' },
+  }),
+  make(opsLeaseSchema, {
+    ...leaseIoniq,
+    vehicle: { id: 'veh-corp-ioniq', modelName: '아이오닉 5', plateNo: '00허 0001' },
+    corporation: { id: 'corp-1', name: '주식회사 데모컴퍼니' },
+  }),
 ];

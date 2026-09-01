@@ -2,8 +2,12 @@ import { http, HttpResponse } from 'msw';
 import {
   availabilitySchema,
   conditionReportSchema,
+  bizLeaseSchema,
   corpMemberSchema,
   creditSchema,
+  fleetListSchema,
+  fleetVehicleDetailSchema,
+  opsLeaseSchema,
   dispatchBoardSchema,
   dispatchRequestSchema,
   loginResponseSchema,
@@ -32,6 +36,9 @@ import {
   rentalCompleted,
   rentalInUse,
   dispatchBoard,
+  fleetList,
+  fleetVehicleDetail,
+  opsLeases,
   dispatchRecommended,
   reservationConfirmed,
   incidentResultFull,
@@ -255,6 +262,54 @@ export const handlers = [
     }
     return json(corpMemberSchema, { ...target, corpGrade: grade });
   }),
+
+  // ── 비즈니스(법인) 플릿 · 리스 ──────────────────
+  http.get(url('/biz/fleet'), () => json(fleetListSchema, fleetList)),
+
+  http.get(url('/biz/fleet/:id'), ({ params }) => {
+    if (params.id !== fleetVehicleDetail.id) {
+      return HttpResponse.json({ message: '차량을 찾을 수 없습니다' }, { status: 404 });
+    }
+    return json(fleetVehicleDetailSchema, fleetVehicleDetail);
+  }),
+
+  http.post(url('/biz/leases/:id/extend-request'), () =>
+    json(
+      bizLeaseSchema,
+      {
+        ...fleetVehicleDetail.lease,
+        status: 'EXTENSION_REQUESTED',
+        requestedEndAt: '2031-01-14T00:00:00.000Z',
+        vehicle: { id: fleetVehicleDetail.id, modelName: fleetVehicleDetail.modelName, plateNo: fleetVehicleDetail.plateNo },
+      },
+      201,
+    ),
+  ),
+
+  http.post(url('/biz/leases/:id/terminate-request'), () =>
+    json(
+      bizLeaseSchema,
+      {
+        ...fleetVehicleDetail.lease,
+        status: 'TERMINATION_REQUESTED',
+        vehicle: { id: fleetVehicleDetail.id, modelName: fleetVehicleDetail.modelName, plateNo: fleetVehicleDetail.plateNo },
+      },
+      201,
+    ),
+  ),
+
+  // ── 운영 어드민 리스 처리 ───────────────────────
+  http.get(url('/ops/leases'), () =>
+    HttpResponse.json(opsLeases.map((l) => opsLeaseSchema.parse(l))),
+  ),
+
+  http.post(url('/ops/leases/:id/approve'), () =>
+    json(opsLeaseSchema, { ...opsLeases[0], status: 'ACTIVE', requestedEndAt: null }, 201),
+  ),
+
+  http.post(url('/ops/leases/:id/reject'), () =>
+    json(opsLeaseSchema, { ...opsLeases[0], status: 'ACTIVE', requestedEndAt: null }, 201),
+  ),
 
   // ── 헬스체크 (ServerWarmup) ─────────────────────
   http.get(url('/health'), () => HttpResponse.json({ status: 'ok' })),

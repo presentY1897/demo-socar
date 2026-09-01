@@ -1,4 +1,5 @@
 export * from './corp/grade';
+export * from './corp/lease';
 export * from './geo/coord';
 export * from './geo/haversine';
 export * from './pricing/engine';

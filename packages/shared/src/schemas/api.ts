@@ -5,6 +5,7 @@ import { incidentStatusSchema, insuranceCoverageSchema } from './incident';
 import { inquiryCategorySchema, inquiryStatusSchema } from './inquiry';
 import { storedPhotoSchema } from './photo';
 import { corpGradeSchema } from '../corp/grade';
+import { leaseStatusSchema } from '../corp/lease';
 import { insuranceTierSchema } from './reservation';
 
 /**
@@ -394,3 +395,106 @@ export const corpMemberSchema = z.object({
   isSelf: z.boolean(),
 });
 export type CorpMemberRes = z.infer<typeof corpMemberSchema>;
+
+// ───────────────── 비즈니스(법인) — 플릿 / 리스 계약 ─────────────────
+
+/** 리스 계약 1건. D-day·임박 여부는 서버가 계산해 내려준다 (화면과 기준을 하나로) */
+export const leaseContractSchema = z.object({
+  id: z.string(),
+  corporationId: z.string(),
+  vehicleId: z.string(),
+  monthlyFeeKrw: z.number().int(),
+  startAt: z.string(),
+  endAt: z.string(),
+  status: leaseStatusSchema,
+  /** 만기까지 남은 일수 (KST 달력 기준, 음수면 만기 지남) */
+  dDay: z.number().int(),
+  expiringSoon: z.boolean(),
+  endedAt: z.string().nullable(),
+  /** 진행 중이거나 마지막으로 처리된 연장/해지 요청의 흔적 */
+  requestedAt: z.string().nullable(),
+  requestedEndAt: z.string().nullable(),
+  requestNote: z.string().nullable(),
+  requestedBy: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+export type LeaseContractRes = z.infer<typeof leaseContractSchema>;
+
+/** 최근 N일 이용 집계 (shared summarizeUsage 결과) */
+export const fleetUsageSchema = z.object({
+  windowDays: z.number().int(),
+  tripCount: z.number().int(),
+  usedDays: z.number().int(),
+  totalHours: z.number(),
+  distanceKm: z.number(),
+  utilizationPct: z.number(),
+});
+
+/** `GET /biz/fleet` 의 원소 — 법인 전용 차량 + 진행 중 계약 + 이용 현황 */
+export const fleetVehicleSchema = z.object({
+  id: z.string(),
+  modelName: z.string(),
+  plateNo: z.string(),
+  fuel: fuelTypeSchema,
+  seats: z.number().int(),
+  status: vehicleStatusSchema,
+  zone: z.object({ id: z.string(), name: z.string() }),
+  lease: leaseContractSchema.nullable(),
+  usage: fleetUsageSchema,
+});
+export type FleetVehicleRes = z.infer<typeof fleetVehicleSchema>;
+
+/** `GET /biz/fleet` — 목록 + 계약 합계 */
+export const fleetListSchema = z.object({
+  summary: z.object({
+    vehicleCount: z.number().int(),
+    activeLeaseCount: z.number().int(),
+    /** 진행 중 계약의 월 리스료 합계 */
+    monthlyTotalKrw: z.number().int(),
+    expiringSoonCount: z.number().int(),
+    pendingRequestCount: z.number().int(),
+  }),
+  items: z.array(fleetVehicleSchema),
+});
+export type FleetListRes = z.infer<typeof fleetListSchema>;
+
+/** 운행일지 1줄 (FMS 자동 기록 = 예약 + 대여) */
+export const fleetTripSchema = z.object({
+  id: z.string(),
+  startAt: z.string(),
+  endAt: z.string(),
+  returnedAt: z.string().nullable(),
+  status: reservationStatusSchema,
+  distanceKm: z.number().nullable(),
+  lateMinutes: z.number().int(),
+  user: z.object({ id: z.string(), name: z.string() }),
+  /** 배차 요청으로 잡힌 예약이면 그 목적 */
+  purpose: z.string().nullable(),
+});
+
+/** `GET /biz/fleet/:id` — 계약 이력 · 운행일지 · 이용 임직원 통계 */
+export const fleetVehicleDetailSchema = fleetVehicleSchema.extend({
+  contracts: z.array(leaseContractSchema),
+  trips: z.array(fleetTripSchema),
+  memberUsage: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      tripCount: z.number().int(),
+      totalHours: z.number(),
+      distanceKm: z.number(),
+    }),
+  ),
+});
+export type FleetVehicleDetailRes = z.infer<typeof fleetVehicleDetailSchema>;
+
+/** `GET /biz/leases` — 차량 표기까지 붙인 계약 목록 */
+export const bizLeaseSchema = leaseContractSchema.extend({
+  vehicle: z.object({ id: z.string(), modelName: z.string(), plateNo: z.string() }),
+});
+export type BizLeaseRes = z.infer<typeof bizLeaseSchema>;
+
+/** `GET /ops/leases` — 운영 어드민은 법인 표기가 더 필요하다 */
+export const opsLeaseSchema = bizLeaseSchema.extend({
+  corporation: z.object({ id: z.string(), name: z.string() }),
+});
+export type OpsLeaseRes = z.infer<typeof opsLeaseSchema>;

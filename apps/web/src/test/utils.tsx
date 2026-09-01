@@ -4,6 +4,7 @@ import { SWRConfig } from 'swr';
 import { vi } from 'vitest';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import {
+  PathParamsContext,
   PathnameContext,
   SearchParamsContext,
 } from 'next/dist/shared/lib/hooks-client-context.shared-runtime';
@@ -61,6 +62,8 @@ interface Options extends RenderOptions {
   pathname?: string;
   /** 'a=1&b=2' 형태 */
   searchParams?: string;
+  /** 동적 라우트 파라미터 — useParams() 가 읽는다 (예: { id: 'veh-1' }) */
+  params?: Record<string, string>;
   router?: AppRouterInstance;
 }
 
@@ -68,7 +71,7 @@ interface Options extends RenderOptions {
  * 세션 · 앱 라우터 컨텍스트 · SWR 캐시를 주입한 렌더.
  *
  * - 세션: SessionProvider가 localStorage에서 유저를 읽으므로 실제 로그인과 같은 형태로 심는다
- * - 라우터: next/link와 useRouter/usePathname/useSearchParams가 컨텍스트 없이는 던지므로 실제 컨텍스트를 채운다
+ * - 라우터: next/link와 useRouter/usePathname/useSearchParams/useParams가 컨텍스트 없이는 던지므로 실제 컨텍스트를 채운다
  * - SWR: provider를 매번 새로 만들어 테스트 간 캐시가 새지 않게 한다
  */
 export function renderWithProviders(
@@ -77,6 +80,7 @@ export function renderWithProviders(
     user,
     pathname = '/',
     searchParams = '',
+    params = {},
     router = createRouterMock(),
     ...options
   }: Options = {},
@@ -90,11 +94,13 @@ export function renderWithProviders(
     wrapper: ({ children }) => (
       <AppRouterContext.Provider value={router}>
         <PathnameContext.Provider value={pathname}>
-          <SearchParamsContext.Provider value={new URLSearchParams(searchParams)}>
-            <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-              <SessionProvider>{children}</SessionProvider>
-            </SWRConfig>
-          </SearchParamsContext.Provider>
+          <PathParamsContext.Provider value={params}>
+            <SearchParamsContext.Provider value={new URLSearchParams(searchParams)}>
+              <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+                <SessionProvider>{children}</SessionProvider>
+              </SWRConfig>
+            </SearchParamsContext.Provider>
+          </PathParamsContext.Provider>
         </PathnameContext.Provider>
       </AppRouterContext.Provider>
     ),

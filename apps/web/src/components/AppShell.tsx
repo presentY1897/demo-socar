@@ -18,6 +18,13 @@ const NAV = [
     icon: '📊',
     show: (user: AuthUser | null) => user?.role === 'OPS_ADMIN',
   },
+  // 운영 어드민의 리스 요청 처리 — M3 백오피스가 붙으면 그 탭의 소섹션으로 들어간다
+  {
+    href: '/ops/leases',
+    label: '리스',
+    icon: '📄',
+    show: (user: AuthUser | null) => user?.role === 'OPS_ADMIN',
+  },
 ];
 
 /**

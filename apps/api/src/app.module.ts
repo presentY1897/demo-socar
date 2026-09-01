@@ -5,6 +5,7 @@ import { BizModule } from './biz/biz.module';
 import { HealthController } from './health.controller';
 import { InquiriesModule } from './inquiries/inquiries.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { OpsModule } from './ops/ops.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RentalsModule } from './rentals/rentals.module';
@@ -25,6 +26,7 @@ import { ZonesModule } from './zones/zones.module';
     DispatchModule,
     InquiriesModule,
     BizModule,
+    OpsModule,
     MetricsModule,
   ],
   controllers: [HealthController],

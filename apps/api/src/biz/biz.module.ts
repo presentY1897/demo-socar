@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DispatchModule } from './dispatch/dispatch.module';
+import { FleetModule } from './fleet/fleet.module';
 import { MembersModule } from './members/members.module';
 
 /**
@@ -11,6 +12,6 @@ import { MembersModule } from './members/members.module';
  * 이후 M5 작업(멤버·플릿·리스)도 전부 이 모듈 하위에 추가한다.
  */
 @Module({
-  imports: [DispatchModule, MembersModule],
+  imports: [DispatchModule, MembersModule, FleetModule],
 })
 export class BizModule {}

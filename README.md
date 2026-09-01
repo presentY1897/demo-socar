@@ -112,7 +112,7 @@ pnpm dev                                # web :3000 + api :4000
 | `member@demo.mocar.kr` | 법인 임직원 / `REQUESTER` | + 배차 요청, 추천 결과 확인 |
 | `approver@demo.mocar.kr` | 법인 임직원 / `APPROVER` | + 추천 근거 검토, 승인/반려, 타임라인 보드 |
 | `admin@demo.mocar.kr` | 법인 배차 담당 / `MANAGER` | + 멤버 등급 관리, 플릿/리스 관리 |
-| `ops@demo.mocar.kr` | 운영 어드민 | 지표 대시보드, 실시간 차량 현황 |
+| `ops@demo.mocar.kr` | 운영 어드민 | 지표 대시보드, 실시간 차량 현황, 리스 연장·해지 요청 처리(`/ops/leases`) |
 
 ## 테스트
 
