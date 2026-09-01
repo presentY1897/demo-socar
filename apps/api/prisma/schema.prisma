@@ -509,6 +509,8 @@ model LeaseContract {
 
   @@index([corporationId, status])
   @@index([vehicleId, status])
+}
+
 // ─────────────────────────── 핸들러(운송기사) 작업 ───────────────────────────
 
 enum HandlerTaskType {

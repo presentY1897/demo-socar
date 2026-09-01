@@ -324,28 +324,6 @@ export const dispatchCandidateSchema = z.object({
   bufferMinutes: z.number().int(),
   lateRiskPct: z.number(),
   reasons: z.array(z.string()),
-
-// ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
-
-/**
- * 작업의 출발/도착 지점.
- * 존이면 `zoneId`가 실리고, 부름 수령지처럼 존이 아닌 곳이면 좌표와 라벨만 실린다 —
- * 작업 카드와 지도가 예약을 다시 조회하지 않고 "출발 → 도착"을 그릴 수 있는 형태다.
- */
-export const taskPlaceSchema = z.object({
-  zoneId: z.string().nullable(),
-  label: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-});
-export type TaskPlaceRes = z.infer<typeof taskPlaceSchema>;
-
-/** `GET /handler/tasks` · `GET /ops/tasks` 의 작업 1건 */
-export const handlerTaskSchema = z.object({
-  id: z.string(),
-  type: handlerTaskTypeSchema,
-  status: handlerTaskStatusSchema,
-  reservationId: z.string().nullable(),
   vehicle: z.object({
     id: z.string(),
     modelName: z.string(),
@@ -521,6 +499,32 @@ export const opsLeaseSchema = bizLeaseSchema.extend({
   corporation: z.object({ id: z.string(), name: z.string() }),
 });
 export type OpsLeaseRes = z.infer<typeof opsLeaseSchema>;
+
+// ─────────────────────── 핸들러 작업 (M2-3 · M2-4) ───────────────────────
+
+/**
+ * 작업의 출발/도착 지점.
+ * 존이면 `zoneId`가 실리고, 부름 수령지처럼 존이 아닌 곳이면 좌표와 라벨만 실린다 —
+ * 작업 카드와 지도가 예약을 다시 조회하지 않고 "출발 → 도착"을 그릴 수 있는 형태다.
+ */
+export const taskPlaceSchema = z.object({
+  zoneId: z.string().nullable(),
+  label: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+});
+export type TaskPlaceRes = z.infer<typeof taskPlaceSchema>;
+
+/** `GET /handler/tasks` · `GET /ops/tasks` 의 작업 1건 */
+export const handlerTaskSchema = z.object({
+  id: z.string(),
+  type: handlerTaskTypeSchema,
+  status: handlerTaskStatusSchema,
+  reservationId: z.string().nullable(),
+  vehicle: z.object({
+    id: z.string(),
+    modelName: z.string(),
+    plateNo: z.string(),
     fuel: fuelTypeSchema,
   }),
   from: taskPlaceSchema,

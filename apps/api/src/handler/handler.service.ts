@@ -17,7 +17,7 @@ import {
 import type { JwtUser } from '../auth/jwt-auth.guard';
 import { toPhotoRows, toStoredPhotos } from '../photos/photo-storage';
 import { PrismaService } from '../prisma/prisma.service';
-import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../dispatch/travel/travel-time';
+import { TRAVEL_ESTIMATOR, type TravelTimeEstimator } from '../common/travel/travel-time';
 import {
   fromPlace,
   HANDLER_TASK_INCLUDE,

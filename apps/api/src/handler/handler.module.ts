@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { TravelModule } from '../dispatch/travel/travel.module';
+import { TravelModule } from '../common/travel/travel.module';
 import { HandlerController } from './handler.controller';
 import { HandlerService } from './handler.service';
 

@@ -187,7 +187,8 @@ export async function runSeed(prisma: PrismaClient) {
   // 등급→권한 판정은 packages/shared 의 CORP_PERMISSIONS 가 단일 소스.
   const passwordHash = await bcrypt.hash('demo1234', 10);
   // 4번째(운영 어드민)는 뒤에서 참조하지 않아 비워 둔다
-  const [user, corpMember, corpAdmin, , handler] = await Promise.all([
+  // 이메일로 꺼내 쓴다 — 위치 기반 구조 분해는 계정이 하나 끼어들 때 조용히 어긋난다
+  const accounts = await Promise.all([
     prisma.user.create({
       data: { email: 'user@demo.mocar.kr', name: '김소카', role: Role.USER, passwordHash },
     }),
@@ -212,6 +213,14 @@ export async function runSeed(prisma: PrismaClient) {
       data: { email: 'handler@demo.mocar.kr', name: '한기사', role: Role.HANDLER, passwordHash },
     }),
   ]);
+  const byEmail = (email: string) => {
+    const found = accounts.find((a) => a.email === email);
+    if (!found) throw new Error(`시드 계정 누락: ${email}`);
+    return found;
+  };
+  const user = byEmail('user@demo.mocar.kr');
+  const corpMember = byEmail('member@demo.mocar.kr');
+  const handler = byEmail('handler@demo.mocar.kr');
 
   // ── 법인 전용존 + 전용 차량 (= 법인이 MOCAR에서 리스한 차량 — 아래 리스 계약과 짝) ──
   const corpZone = await prisma.zone.create({

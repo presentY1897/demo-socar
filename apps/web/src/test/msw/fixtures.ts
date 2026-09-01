@@ -811,4 +811,5 @@ export const userHandler = make(authUserSchema, {
   name: '한기사',
   role: 'HANDLER',
   corporationId: null,
+  corpGrade: null,
 });

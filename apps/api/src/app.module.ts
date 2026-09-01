@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { BizModule } from './biz/biz.module';
-import { DispatchModule } from './dispatch/dispatch.module';
 import { HandlerModule } from './handler/handler.module';
 import { HealthController } from './health.controller';
 import { InquiriesModule } from './inquiries/inquiries.module';
