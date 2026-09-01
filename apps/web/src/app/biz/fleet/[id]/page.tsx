@@ -16,9 +16,9 @@ import { api, ApiError, swrFetcher } from '@/lib/api';
 import { fmtDate, fmtDateTime, kstIso, krw } from '@/lib/format';
 
 /**
- * 차량 상세. 라우트 파라미터는 `use(params)`가 아니라 `useParams()`로 읽는다 —
- * 클라이언트 전용 화면이라 Promise 프롭을 풀 이유가 없고, React 19는 클라이언트에서
- * 만든 프로미스를 `use`로 못 받아 테스트에서 화면 전체가 서스펜드되기 때문이다.
+ * 차량 상세. 라우트 파라미터는 `useParams()`로 읽는다 — 클라이언트 전용 화면의 공통 규약이다
+ * (React 19는 클라이언트에서 만든 프로미스를 `use`로 못 받아 테스트에서 화면이 서스펜드된다).
+ * src/test/README.md "동적 라우트 화면" 참고.
  */
 export default function BizFleetDetailPage() {
   const { id } = useParams<{ id: string }>();

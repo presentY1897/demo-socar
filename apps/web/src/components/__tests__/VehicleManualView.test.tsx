@@ -7,7 +7,7 @@ import { renderWithProviders, screen } from '@/test/utils';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-// 페이지(`app/vehicles/[id]/manual/page.tsx`)는 `use(params)`만 하는 래퍼라 화면 본체를 직접 렌더한다
+// 페이지(`app/vehicles/[id]/manual/page.tsx`)는 `useParams()`만 하는 래퍼라 화면 본체를 직접 렌더한다
 const renderManual = (id: string) =>
   renderWithProviders(<VehicleManualView id={id} />, { pathname: `/vehicles/${id}/manual` });
 

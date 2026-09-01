@@ -30,20 +30,6 @@ export const MOCK_USERS = {
   opsAdmin: userOpsAdmin,
 } satisfies Record<string, AuthUser>;
 
-/**
- * Next 15의 페이지 `params`(Promise)를 테스트에서 넘길 때 쓴다.
- *
- * 페이지는 `use(params)`로 값을 풀는데, jsdom 환경에서는 서스펜스 재개가 흐르지 않아
- * 화면이 영원히 fallback에 머문다. React가 내부적으로 쓰는 "이미 이행된 thenable" 표식을
- * 미리 붙여 두면 `use`가 동기적으로 값을 돌려주고 서스펜스 자체가 일어나지 않는다.
- */
-export function routeParams<T extends object>(value: T): Promise<T> {
-  const thenable = Promise.resolve(value) as Promise<T> & { status?: string; value?: T };
-  thenable.status = 'fulfilled';
-  thenable.value = value;
-  return thenable;
-}
-
 /** 앱 라우터 목 — push/replace 호출 여부로 화면 이동을 검증한다 */
 export function createRouterMock(): AppRouterInstance {
   return {

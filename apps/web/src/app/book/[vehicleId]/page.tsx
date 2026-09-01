@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, use, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import type { QuoteBreakdown } from '@socar/shared';
 import { api, ApiError, swrFetcher } from '@/lib/api';
@@ -371,8 +371,9 @@ function Row({ label, value, red }: { label: string; value: string; red?: boolea
   );
 }
 
-export default function BookPage({ params }: { params: Promise<{ vehicleId: string }> }) {
-  const { vehicleId } = use(params);
+/** 라우트 파라미터는 `useParams()`로 읽는다 (src/test/README.md — 동적 라우트 화면 규약) */
+export default function BookPage() {
+  const { vehicleId } = useParams<{ vehicleId: string }>();
   return (
     <Suspense fallback={<p className="py-16 text-center text-sm text-gray-400">불러오는 중...</p>}>
       <BookPageInner vehicleId={vehicleId} />

@@ -21,7 +21,7 @@ pnpm --filter @socar/web test:watch  # 워치
 | `msw/handlers.ts` | 기본 핸들러 (존·차량·인증·예약·이용 플로우·문의/사고). 전 테스트 공통 상태 |
 | `msw/fixtures.ts` | 목 데이터. **shared 응답 스키마로 `parse`** 해서 만든다 |
 | `msw/server.ts` | `setupServer` 인스턴스 |
-| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터(경로·쿼리·동적 파라미터)·SWR 캐시 주입, `MOCK_USERS`, `routeParams` |
+| `utils.tsx` | `renderWithProviders` — 세션·앱 라우터(경로·쿼리·동적 파라미터)·SWR 캐시 주입, `MOCK_USERS` |
 | `image.ts` | 사진 압축 대역 — `stubImagePipeline()`(캔버스/`createImageBitmap`) · `jpegFile()` |
 
 ## 쓰는 법
@@ -76,14 +76,16 @@ server.use(
 expect(body).toMatchObject({ insurance: 'FULL', useCredit: true });
 ```
 
-### 동적 라우트 페이지(`params`)
+### 동적 라우트 페이지(`[id]`)
 
-Next 15의 `params`는 Promise다. 페이지가 `use(params)`로 푸는데 jsdom에서는 서스펜스 재개가
-흐르지 않아 화면이 fallback에 멈춘다 — `routeParams()`로 감싸서 넘긴다.
+페이지에 `params` prop을 넘기지 않는다. 화면이 `useParams()`로 읽으므로
+`renderWithProviders`의 `params` 옵션에 값을 넣는다 (아래 "동적 라우트 화면" 규약 참고).
 
 ```tsx
-renderWithProviders(<ReservationDetailPage params={routeParams({ id: 'resv-2' })} />, {
+renderWithProviders(<ReservationDetailPage />, {
   user: MOCK_USERS.personal,
+  pathname: '/reservations/resv-2',
+  params: { id: 'resv-2' },
 });
 ```
 
@@ -112,8 +114,27 @@ await userEvent.upload(screen.getByLabelText('사진 촬영'), jpegFile());
 2. `msw/fixtures.ts`에 그 스키마로 `parse`한 픽스처 추가
 3. `msw/handlers.ts`에 기본 핸들러 추가
 
-## 동적 라우트 화면
+## 동적 라우트 화면 — `useParams()`로 통일 (규약)
 
-클라이언트 전용 화면은 라우트 파라미터를 `use(params)`가 아니라 **`useParams()`**로 읽는다.
+**클라이언트 컴포넌트(`'use client'`)는 라우트 파라미터를 `useParams()`로만 읽는다.**
+`params` prop을 받아 `use(params)`로 푸는 형태는 쓰지 않는다.
+
 React 19는 클라이언트에서 만든 프로미스를 `use`로 받지 못해(`uncached promise`) 테스트에서
-화면 전체가 서스펜드된 채로 멈춘다 — `renderWithProviders`의 `params` 옵션이 그 값을 넣어 준다.
+화면 전체가 서스펜드된 채로 멈춘다. 예전에는 `routeParams()` 헬퍼로 "이미 이행된 thenable"
+표식을 붙여 우회했지만, React 내부 규약에 기대는 방식이라 소비자 화면(`use(params)`)과
+biz 화면(`useParams()`)이 갈라진 채 남아 있었다. M5-6에서 **`useParams()` 한쪽으로 통일**하고
+헬퍼는 제거했다.
+
+```tsx
+// app/reservations/[id]/page.tsx
+'use client';
+import { useParams } from 'next/navigation';
+
+export default function ReservationDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  ...
+}
+```
+
+테스트는 `renderWithProviders`의 `params` 옵션으로 값을 넣는다 (`PathParamsContext` 주입).
+서버 컴포넌트에서 `params`를 `await`하는 건 여전히 정상이다 — 이 규약은 클라이언트 화면 한정.

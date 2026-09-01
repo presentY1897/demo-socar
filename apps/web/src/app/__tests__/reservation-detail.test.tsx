@@ -18,15 +18,16 @@ import {
   usageEmpty,
 } from '@/test/msw/fixtures';
 import { jpegFile, stubImagePipeline } from '@/test/image';
-import { MOCK_USERS, renderWithProviders, routeParams, screen, waitFor } from '@/test/utils';
+import { MOCK_USERS, renderWithProviders, screen, waitFor } from '@/test/utils';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const url = (path: string) => `${API}${path}`;
 
 function renderDetail(id = reservationInUse.id) {
-  return renderWithProviders(<ReservationDetailPage params={routeParams({ id })} />, {
+  return renderWithProviders(<ReservationDetailPage />, {
     user: MOCK_USERS.personal,
     pathname: `/reservations/${id}`,
+    params: { id },
   });
 }
 

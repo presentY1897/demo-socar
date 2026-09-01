@@ -1,7 +1,7 @@
 'use client';
 
-import { use, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import type { RentalUsageRes } from '@socar/shared';
@@ -72,8 +72,9 @@ const PAYMENT_STATUS_LABEL: Record<string, string> = {
 
 type StepState = 'todo' | 'current' | 'done';
 
-export default function ReservationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+/** 라우트 파라미터는 `useParams()`로 읽는다 (src/test/README.md — 동적 라우트 화면 규약) */
+export default function ReservationDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data, mutate } = useSWR<Detail>(`/reservations/${id}`, swrFetcher, {
     refreshInterval: 10000,
