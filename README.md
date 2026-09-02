@@ -295,9 +295,33 @@ pnpm --filter @socar/api build:zones -- --std /path/to/전국주차장정보표�
 
 ## 배포
 
-- **웹**: Vercel — Root Directory를 `apps/web`으로 설정, `NEXT_PUBLIC_API_URL` 환경변수 지정
+- **웹**: Vercel — Root Directory를 `apps/web`으로 설정, `NEXT_PUBLIC_API_URL` 환경변수 지정.
+  `@socar/shared`는 `dist/`로 해석되므로 웹 빌드 전에 먼저 빌드돼야 하는데, 그 순서를
+  배포 대시보드 설정에만 맡기지 않으려고 `prebuild` 스크립트로 저장소에 고정했다 —
+  `pnpm --filter @socar/web build`만 실행해도 shared가 먼저 선다 (API도 동일)
 - **DB**: Neon — 무료 PostgreSQL, 연결 문자열을 Render에 입력
 - **API**: Render — 저장소 루트의 `render.yaml` Blueprint 사용 (`DATABASE_URL`, `WEB_ORIGIN` 입력)
+
+### 배포 후 스모크 체크리스트
+
+기능이 7개 영역으로 늘어 "빌드가 됐다"만으로는 동작을 보증할 수 없다. 배포 후 이 순서로 확인한다.
+
+| # | 확인 | 어디서 |
+|---|---|---|
+| 1 | `/health`가 `{ok:true}` | API URL |
+| 2 | 시드가 새 버전으로 재적재됐는지 (`AUTO_SEED: 시드 vN → vM` 로그) | Render 로그 |
+| 3 | 데모 계정 7종 로그인 → 각자의 랜딩(`/`·`/biz`·`/dashboard`·`/handler`) | 웹 |
+| 4 | 홈에서 이용 시간 변경 → 존 선택 → "바로 픽업"과 "부름" 구분 표시 | 웹 |
+| 5 | 예약 → 체크인(사진) → 스마트키 → 체크아웃 → 반납 정산 완주 | `user@` |
+| 6 | 운영 홈 경고 피드 4종 + **지도의 운행 중 차량이 실제로 움직이는지**(SSE) | `ops@` |
+| 7 | 리포트 탭에서 지표·축·기간을 바꾸면 차트와 표가 함께 갱신 | `ops@` |
+| 8 | CSV 내려받아 엑셀에서 한글이 깨지지 않는지 | `ops@` |
+| 9 | 핸들러 작업 수락 → 이동 → 완료 후 차량 존이 바뀌는지 | `handler@` |
+| 10 | 등급별 화면 분기(`viewer@`는 요청 버튼 없음, `approver@`는 승인 가능) | `/biz` |
+
+**6번(SSE)이 배포 환경에서 가장 불확실하다.** 로컬에서는 5틱에 58~98m 이동을 실측했지만,
+프록시가 `text/event-stream`을 버퍼링하면 이벤트가 뭉쳐서 도착하거나 끊긴다. 지도가 안 움직이면
+브라우저 devtools의 Network에서 `vehicles/live` 응답이 스트리밍으로 들어오는지부터 본다.
 
 ### 콜드 스타트 대응
 
