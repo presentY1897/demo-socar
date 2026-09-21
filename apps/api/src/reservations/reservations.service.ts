@@ -12,6 +12,7 @@ import {
   DELIVERY_MIN_LEAD_MINUTES,
   DELIVERY_PREP_BUFFER_MINUTES,
   deliveryFee,
+  earliestBookableStart,
   haversineMeters,
   onewayFee,
   quote,
@@ -176,7 +177,7 @@ export class ReservationsService {
 
     const rangeError = validateSlotRange(startAt, endAt);
     if (rangeError) throw new BadRequestException(rangeError);
-    if (startAt.getTime() < Date.now() - 60_000) {
+    if (startAt.getTime() < earliestBookableStart(new Date()).getTime()) {
       throw new BadRequestException('과거 시각으로는 예약할 수 없습니다');
     }
 
@@ -266,7 +267,7 @@ export class ReservationsService {
     const endAt = new Date(dto.endAt);
     const rangeError = validateSlotRange(startAt, endAt);
     if (rangeError) throw new BadRequestException(rangeError);
-    if (startAt.getTime() < Date.now() - 60_000) {
+    if (startAt.getTime() < earliestBookableStart(new Date()).getTime()) {
       throw new BadRequestException('과거 시각으로는 변경할 수 없습니다');
     }
 

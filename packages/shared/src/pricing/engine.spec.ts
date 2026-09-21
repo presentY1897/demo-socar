@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DELIVERY_FEE_MIN_KRW,
   deliveryFee,
+  earliestBookableStart,
   FREE_DRIVE_KM,
   LATE_FEE_PER_MIN_KRW,
   ONEWAY_FEE_MIN_KRW,
@@ -45,6 +46,23 @@ describe('validateSlotRange — 10분 단위·최소 30분·최대 28일', () =>
   it('역순/0길이 구간을 거부한다', () => {
     expect(validateSlotRange(wed(12), wed(10))).toBeTruthy();
     expect(validateSlotRange(wed(10), wed(10))).toBeTruthy();
+  });
+});
+
+describe('earliestBookableStart — 이미 시작된 현재 슬롯까지는 예약할 수 있다', () => {
+  const at = (h: number, m: number, s = 0) =>
+    new Date(`2026-09-02T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}+09:00`);
+
+  it('슬롯 중간이면 그 슬롯의 시작 시각이다 (19:04 → 19:00)', () => {
+    expect(earliestBookableStart(at(19, 4, 30))).toEqual(wed(19));
+  });
+  it('슬롯 경계에서는 그 시각 그대로다', () => {
+    expect(earliestBookableStart(wed(19, 10))).toEqual(wed(19, 10));
+  });
+  it('슬롯이 끝나기 직전에도 현재 슬롯까지만 받는다 — 지나간 슬롯은 그보다 앞이다', () => {
+    const earliest = earliestBookableStart(at(19, 9, 59));
+    expect(earliest).toEqual(wed(19));
+    expect(wed(18, 50).getTime()).toBeLessThan(earliest.getTime());
   });
 });
 

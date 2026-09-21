@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
+import { SLOT_MS } from '@socar/shared';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -159,5 +160,33 @@ describe('예약 동시성/멱등성 (통합)', () => {
       idempotencyKey: key,
     });
     expect(second.status).toBe(400);
+  });
+
+  it('이미 시작된 현재 슬롯으로 예약하면 받고 곧바로 이용 시작된다 — 지나간 슬롯은 400', async () => {
+    const slotNow = () => Math.floor(Date.now() / SLOT_MS) * SLOT_MS;
+    const range = (slot: number) => ({
+      startAt: new Date(slot).toISOString(),
+      endAt: new Date(slot + 6 * SLOT_MS).toISOString(),
+    });
+
+    // 현재 슬롯보다 앞선 슬롯은 과거다
+    const past = await book(range(slotNow() - SLOT_MS));
+    expect(past.status).toBe(400);
+
+    // 현재 슬롯은 이미 시작됐어도 받는다 — 기본 이용 시간이 "다음 슬롯"이라 결제 도중 시작되기 쉽다
+    let slot = slotNow();
+    let res = await book(range(slot));
+    if (res.status === 400 && slotNow() !== slot) {
+      // 요청 도중 슬롯 경계를 넘었다 — 새 현재 슬롯으로 한 번 더
+      slot = slotNow();
+      res = await book(range(slot));
+    }
+    expect(res.status).toBe(201);
+
+    await request(app.getHttpServer())
+      .post('/rentals/start')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reservationId: res.body.id })
+      .expect(201);
   });
 });

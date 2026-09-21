@@ -60,6 +60,17 @@ export function validateSlotRange(startAt: Date, endAt: Date): string | null {
 }
 
 /**
+ * 지금 예약할 수 있는 가장 이른 시작 시각 — **이미 시작된 현재 슬롯**까지 받는다.
+ *
+ * 기본 이용 시간이 "다음 10분 슬롯"이라, 차를 고르고 결제하는 사이에 그 슬롯이 시작돼 버리는
+ * 일이 흔하다. 그걸 과거 시각으로 거절하면 "지금 바로 이용"이 3번에 1번꼴로 실패한다.
+ * 지나간 슬롯(현재 슬롯보다 앞)은 여전히 거절한다.
+ */
+export function earliestBookableStart(now: Date): Date {
+  return new Date(Math.floor(now.getTime() / SLOT_MS) * SLOT_MS);
+}
+
+/**
  * 선결제 견적: 대여요금(슬롯별 주중/주말 단가) + 면책상품 + 편도 수수료 − 쿠폰 − 크레딧.
  * 할인은 [쿠폰 → 크레딧] 순서로 적용하고 0 아래로 내려가지 않는다.
  */

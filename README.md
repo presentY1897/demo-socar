@@ -126,15 +126,15 @@ pnpm dev                                # web :3000 + api :4000
 ## 테스트
 
 ```bash
-pnpm test                           # 단위 167 + 프론트 242 — DB·서버 없이 돈다
-pnpm --filter @socar/api test:int   # 통합 291 — 실제 PostgreSQL 필요
+pnpm test                           # 단위 170 + 프론트 246 — DB·서버 없이 돈다
+pnpm --filter @socar/api test:int   # 통합 292 — 실제 PostgreSQL 필요
 ```
 
 | 층 | 수 | 도구 | 무엇을 지키나 |
 |---|--:|---|---|
-| 단위 | 167 | Vitest · Jest | 요금·정산, 권한 매핑, 상태 머신 같은 순수 함수 규칙 |
-| 프론트 | 242 | Vitest + RTL + MSW | 역할·등급별 화면 분기와 화면 동선 |
-| 통합 | 291 | Supertest + 실제 PostgreSQL | 동시성·트랜잭션·권한 가드·E2E 동선 |
+| 단위 | 170 | Vitest · Jest | 요금·정산, 권한 매핑, 상태 머신 같은 순수 함수 규칙 |
+| 프론트 | 246 | Vitest + RTL + MSW | 역할·등급별 화면 분기와 화면 동선 |
+| 통합 | 292 | Supertest + 실제 PostgreSQL | 동시성·트랜잭션·권한 가드·E2E 동선 |
 
 - **권한 매트릭스는 손으로 적지 않습니다** — 엔드포인트는 Nest 라우트 메타데이터에서, 기대값은 shared 권한표에서 뽑아
   데코레이터를 빠뜨린 새 엔드포인트를 테스트가 먼저 잡습니다

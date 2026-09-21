@@ -2,11 +2,11 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { swrFetcher } from '@/lib/api';
 import { krw } from '@/lib/format';
-import { defaultRange, durationLabel } from '@/lib/timerange';
+import { defaultRange, durationLabel, hasStarted } from '@/lib/timerange';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import type { ZoneMarker } from '@/components/ZoneMap';
 
@@ -52,8 +52,19 @@ const FUEL_LABEL: Record<string, string> = { EV: '전기', GASOLINE: '휘발유'
 
 export default function HomePage() {
   const [range, setRange] = useState(defaultRange);
+  const [rangeTouched, setRangeTouched] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // 기본 구간은 "지금"에 붙어 있어야 한다 — 손대지 않은 채 슬롯이 지나가면 다음 슬롯으로 따라간다.
+  // 직접 고른 시간은 건드리지 않는다.
+  useEffect(() => {
+    if (rangeTouched) return;
+    const timer = setInterval(() => {
+      setRange((r) => (hasStarted(r) ? defaultRange() : r));
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [rangeTouched]);
 
   const q = `startAt=${encodeURIComponent(range.startAt)}&endAt=${encodeURIComponent(range.endAt)}`;
   const { data: zones } = useSWR<(ZoneMarker & { region: string })[]>(`/zones?${q}`, swrFetcher);
@@ -93,7 +104,10 @@ export default function HomePage() {
             <TimeRangePicker
               startAt={range.startAt}
               endAt={range.endAt}
-              onChange={(startAt, endAt) => setRange({ startAt, endAt })}
+              onChange={(startAt, endAt) => {
+                setRangeTouched(true);
+                setRange({ startAt, endAt });
+              }}
             />
             <button
               onClick={() => setPickerOpen(false)}
