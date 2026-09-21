@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import HomePage from '@/app/page';
 import { server } from '@/test/msw/server';
-import { zoneMarkers } from '@/test/msw/fixtures';
-import { renderWithProviders, screen, waitFor } from '@/test/utils';
+import { reservationInUse, reservationSchemaRows, zoneMarkers } from '@/test/msw/fixtures';
+import { MOCK_USERS, renderWithProviders, screen, waitFor } from '@/test/utils';
 
 // 지도는 leaflet(캔버스/DOM 측정)에 의존해 jsdom에서 의미가 없다 —
 // 홈 화면의 관심사는 "존 목록을 받아 마커/리스트로 잇는가"이므로 지도만 대역으로 바꾼다.
@@ -84,5 +84,43 @@ describe('홈 — 존 검색', () => {
     expect(new Date(endAt).getTime() - new Date(startAt).getTime()).toBe(2 * 60 * 60 * 1000);
     // 10분 단위로 올림된 시각
     expect(new Date(startAt).getUTCMinutes() % 10).toBe(0);
+  });
+});
+
+/**
+ * 이용 중에는 홈이 대여(지도) 화면이 아니라 이용 화면이다 —
+ * 차를 이미 탄 사람에게 필요한 건 스마트키와 반납이다.
+ */
+describe('홈 — 이용 중', () => {
+  const mineInUse = () =>
+    server.use(http.get(`${API}/reservations/mine`, () => HttpResponse.json(reservationSchemaRows([reservationInUse]))));
+
+  it('이용 중인 예약이 있으면 지도 대신 그 예약의 이용 화면을 보여준다', async () => {
+    mineInUse();
+    renderWithProviders(<HomePage />, { user: MOCK_USERS.personal });
+
+    expect(await screen.findByText('이용 중인 차량')).toBeInTheDocument();
+    expect(await screen.findByTestId('stage')).toHaveAttribute('data-stage', 'CHECK_IN');
+    expect(screen.queryByTestId('zone-map')).not.toBeInTheDocument();
+  });
+
+  it('"다른 차량 찾기"로 지도에 나갔다가 배너로 이용 화면에 돌아온다', async () => {
+    mineInUse();
+    const { userEvent } = renderWithProviders(<HomePage />, { user: MOCK_USERS.personal });
+
+    await userEvent.click(await screen.findByRole('button', { name: /다른 차량 찾기/ }));
+    expect(await screen.findByTestId('zone-map')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /이용 중 — 이용 화면으로/ }));
+    expect(await screen.findByTestId('stage')).toBeInTheDocument();
+    expect(screen.queryByTestId('zone-map')).not.toBeInTheDocument();
+  });
+
+  it('이용 중인 예약이 없으면 로그인해도 홈은 지도다', async () => {
+    renderWithProviders(<HomePage />, { user: MOCK_USERS.personal });
+
+    expect(await screen.findByTestId('zone-map')).toBeInTheDocument();
+    expect(screen.queryByTestId('stage')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /이용 화면으로/ })).not.toBeInTheDocument();
   });
 });

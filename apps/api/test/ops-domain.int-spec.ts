@@ -9,7 +9,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { CORP_ZONE_NAME, loadZoneDefs, runSeed, SEED_VERSION } from '../src/seed/run-seed';
+import { BACKGROUND_DRIVER_EMAIL, CORP_ZONE_NAME, loadZoneDefs, runSeed, SEED_VERSION } from '../src/seed/run-seed';
 
 process.env.DATABASE_URL ??= 'postgresql://socar:socar@localhost:5432/socar';
 
@@ -111,6 +111,18 @@ describe('운영 백오피스 도메인 (통합)', () => {
       where: { status: 'IN_USE', reservation: { endAt: { lt: new Date() } } },
     });
     expect(lateNow).toBeGreaterThanOrEqual(1);
+  });
+
+  it("시드의 '이용 중' 대여는 배경 계정의 것이다 — 데모 로그인 계정은 이용 중으로 시작하지 않는다", async () => {
+    // 이용 중에는 홈이 이용 화면이 된다. user@가 시드부터 이용 중이면 처음 온 사람이 지도를 못 본다.
+    const seededInUse = await prisma.reservation.findMany({
+      where: { payments: { some: { idempotencyKey: { in: ['seed-late-return', 'seed-driving-now'] } } } },
+      include: { user: true },
+    });
+    expect(seededInUse).toHaveLength(2);
+    for (const r of seededInUse) {
+      expect(r.user.email).toBe(BACKGROUND_DRIVER_EMAIL);
+    }
   });
 
   it('고객 탭 데모 데이터: 지연 반납·사고 접수·결제 거절이 한 계정에 모여 있다', async () => {

@@ -8,6 +8,7 @@ import { PrismaClient, Role, CorpGrade, FuelType, InsuranceTier, ReservationStat
 import * as bcrypt from 'bcryptjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { DELIVERY_MIN_LEAD_MINUTES } from '@socar/shared';
 import { MANUAL_MODEL_NAMES } from '../vehicles/vehicle-manual';
 import { initialTelemetry } from '../telemetry/telemetry-defaults';
@@ -24,8 +25,13 @@ import { initialTelemetry } from '../telemetry/telemetry-defaults';
  *   v7: 운영 백오피스 도메인 (텔레메트리·존 계약·도입/보험) + 경고 4종·유의 유저·문의함 데모 데이터
  *   v8: 운행 중(진행 중) 이용 1건 + 탁송 중(EN_ROUTE) 작업 1건 — 상태 4종과 SSE 좌표 이동을 시드만으로 재현
  *   v9: 완료된 핸들러 작업 12건 — 리포트 '작업 처리량'과 핸들러별 처리량 차트가 0으로만 남지 않게
+ *   v10: 운영 데모용 '이용 중' 대여 2건(지연 반납·운행 중)을 배경 계정 소유로 — 이용 중에는 홈이
+ *        이용 화면이 되므로, user@ 계정이 시드부터 이용 중이면 처음 온 사람이 지도를 못 본다
  */
-export const SEED_VERSION = 9;
+export const SEED_VERSION = 10;
+
+/** 운영 데모용 '이용 중' 대여의 주인 — 데모 로그인 계정이 아니다 */
+export const BACKGROUND_DRIVER_EMAIL = 'driver@seed.mocar.kr';
 
 /** 법인 전용존 이름 — 시드가 만든 존을 테스트가 되짚을 때 쓴다 */
 export const CORP_ZONE_NAME = '데모컴퍼니 사옥 주차장';
@@ -239,8 +245,19 @@ export async function runSeed(prisma: PrismaClient) {
     prisma.user.create({
       data: { email: 'handler@demo.mocar.kr', name: '한기사', role: Role.HANDLER, passwordHash },
     }),
+    // 배경 계정 — 로그인용이 아니다(비밀번호를 아무도 모른다). 운영 센터가 보여줄 '지금 이용 중인 차'의
+    // 주인 역할만 한다. 이걸 user@에게 주면 그 계정의 홈이 시드 직후부터 이용 화면으로 바뀐다.
+    prisma.user.create({
+      data: {
+        email: BACKGROUND_DRIVER_EMAIL,
+        name: '오운행',
+        role: Role.USER,
+        passwordHash: await bcrypt.hash(randomUUID(), 10),
+      },
+    }),
   ]);
   const user = seeded(accounts, 'email', 'user@demo.mocar.kr');
+  const backgroundDriver = seeded(accounts, 'email', BACKGROUND_DRIVER_EMAIL);
   const corpMember = seeded(accounts, 'email', 'member@demo.mocar.kr');
   const handler = seeded(accounts, 'email', 'handler@demo.mocar.kr');
 
@@ -708,7 +725,7 @@ export async function runSeed(prisma: PrismaClient) {
     occupied.add(lateVehicle.id);
     await prisma.reservation.create({
       data: {
-        userId: user.id,
+        userId: backgroundDriver.id,
         vehicleId: lateVehicle.id,
         startAt: lateStartAt,
         endAt: lateEndAt,
@@ -765,7 +782,7 @@ export async function runSeed(prisma: PrismaClient) {
     occupied.add(drivingVehicle.id);
     await prisma.reservation.create({
       data: {
-        userId: user.id,
+        userId: backgroundDriver.id,
         vehicleId: drivingVehicle.id,
         startAt: drivingStartAt,
         endAt: drivingEndAt,

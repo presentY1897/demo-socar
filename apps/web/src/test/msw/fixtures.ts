@@ -357,6 +357,10 @@ export const reservationInUse: ReservationRes = make(reservationSchema, {
   rental: rentalInUse,
 });
 
+/** `/reservations/mine` 목록 응답 — 행마다 계약(schema)을 통과시켜 만든다 */
+export const reservationSchemaRows = (rows: ReservationRes[]) =>
+  rows.map((r) => reservationSchema.parse(r));
+
 // ─────────────────────── 이용 플로우 (체크인/아웃) ───────────────────────
 
 /** 1×1 투명 JPEG 자리를 대신하는 짧은 base64 (내용은 검증하지 않는다) */

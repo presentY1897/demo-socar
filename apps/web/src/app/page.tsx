@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { swrFetcher } from '@/lib/api';
 import { krw } from '@/lib/format';
+import { pickActiveReservation } from '@/lib/rental-stage';
+import { useSession } from '@/lib/session';
 import { defaultRange, durationLabel, hasStarted } from '@/lib/timerange';
+import { ReservationDetailView } from '@/components/ReservationDetailView';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import type { ZoneMarker } from '@/components/ZoneMap';
 
@@ -50,7 +53,62 @@ const REGION_LABEL: Record<string, string> = {
 };
 const FUEL_LABEL: Record<string, string> = { EV: '전기', GASOLINE: '휘발유', HYBRID: '하이브리드' };
 
+interface MineRow {
+  id: string;
+  status: string;
+  vehicle: { modelName: string };
+  rental: { status: string; startedAt?: string | null } | null;
+}
+
+/**
+ * 홈. 평소에는 차를 찾는 지도지만, **이용 중에는 이용 화면**이 홈이다 —
+ * 차를 이미 탄 사람에게 필요한 건 스마트키와 반납이지 대여 화면이 아니다.
+ * 지도가 필요하면 "다른 차량 찾기"로 나가고, 지도 위 배너로 돌아온다.
+ */
 export default function HomePage() {
+  const { user, ready } = useSession();
+  const { data: mine, mutate: mutateMine } = useSWR<MineRow[]>(
+    user ? '/reservations/mine' : null,
+    swrFetcher,
+  );
+  const active = pickActiveReservation(mine);
+  // 한 번 잡은 이용 화면은 반납 뒤 정산 결과까지 보여준다 — 목록에서 빠졌다고 지도로 튕기지 않게
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState(false);
+  useEffect(() => {
+    if (active && !pinnedId) setPinnedId(active.id);
+  }, [active, pinnedId]);
+
+  // 이용 중인 사람에게 지도가 먼저 번쩍이지 않게, 내 예약을 확인할 때까지만 기다린다
+  if (!ready || (user && mine === undefined)) {
+    return <p className="py-16 text-center text-sm text-gray-400">불러오는 중...</p>;
+  }
+
+  const shownId = browsing ? null : (pinnedId ?? active?.id ?? null);
+  if (shownId) {
+    return (
+      <ReservationDetailView
+        id={shownId}
+        onBrowse={() => {
+          setBrowsing(true);
+          void mutateMine();
+        }}
+      />
+    );
+  }
+
+  return (
+    <ZoneSearch
+      activeLabel={active ? active.vehicle.modelName : null}
+      onResume={() => {
+        if (active) setPinnedId(active.id);
+        setBrowsing(false);
+      }}
+    />
+  );
+}
+
+function ZoneSearch({ activeLabel, onResume }: { activeLabel: string | null; onResume: () => void }) {
   const [range, setRange] = useState(defaultRange);
   const [rangeTouched, setRangeTouched] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -118,6 +176,16 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* 이용 중에 지도로 나온 사람이 돌아갈 길 */}
+      {activeLabel && (
+        <button
+          onClick={onResume}
+          className="absolute inset-x-3 bottom-3 z-[999] rounded-xl bg-green-600 px-4 py-2.5 text-left text-sm font-semibold text-white shadow-lg"
+        >
+          🚗 {activeLabel} 이용 중 — 이용 화면으로
+        </button>
+      )}
 
       {/* 지역 점프 */}
       <div className="absolute left-3 top-[4.5rem] z-[999] flex gap-1.5">
